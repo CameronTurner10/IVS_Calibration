@@ -42,7 +42,7 @@ if __name__ == "__main__":
     T = 0.25
     sigma = 0.20
 
-    example_p = bs_call(F, 5500, T, sigma)
+    example_p = bs_call(F, 5000, T, sigma)
     print(f"The call price at a strike price of 5500 is {example_p}")
 
     strikes = np.linspace(4500, 6000, 100)

@@ -6,8 +6,13 @@ authors = [
     {name = "CameronTurner10",email = "C.Turner2-23@student.lboro.ac.uk"}
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13,<3.14"
 dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "jupyter"
 ]
 
 [tool.poetry]
