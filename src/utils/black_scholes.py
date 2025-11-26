@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 D = 1
 N = norm.cdf
 
+def d1(F, K, T, sigma):
+    return (np.log(F / K) + 0.5 * sigma**2 * T) / (sigma * np.sqrt(T))
+
 def bs_call(F,K,T,sigma):
 
     if T<=0: 
@@ -19,26 +22,35 @@ def bs_call(F,K,T,sigma):
     if sigma<=0:
         return max(F-K,0)
     
-    d1 = (np.log(F/K) + (sigma**2 * T)/2)/(sigma * np.sqrt(T))
-    d2 = d1 - sigma * np.sqrt(T) 
+    d1_value = d1(F,K,T,sigma)
+    d2_value = d1_value - sigma * np.sqrt(T)
 
-    C = D*(F * N(d1) - K * N(d2))
+    C = D*(F * N(d1_value) - K * N(d2_value))
 
     return C
+
+def vega(F, K, T, sigma):
+    d1_value = d1(F, K, T, sigma)
+    return F * np.sqrt(T) * norm.pdf(d1_value)
+
+def f_sigma(sigma, F, K, T, market_price):
+    return bs_call(F, K, T, sigma) - market_price
+
 
 if __name__ == "__main__":
     F = 5000
     T = 0.25
     sigma = 0.20
-    example_p = bs_call(F,5500,T,sigma)
+
+    example_p = bs_call(F, 5500, T, sigma)
     print(f"The call price at a strike price of 5500 is {example_p}")
 
     strikes = np.linspace(4500, 6000, 100)
     prices = []
     for K in strikes:
-        price = bs_call(F,K,T,sigma)
+        price = bs_call(F, K, T, sigma)
         prices.append(price)
-    
+
     plt.plot(strikes, prices)
     plt.title("Call price vs Strike")
     plt.xlabel("Strike K")
