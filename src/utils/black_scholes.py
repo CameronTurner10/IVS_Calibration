@@ -9,13 +9,13 @@ import matplotlib.pyplot as plt
 # T -> time to maturity         T>0
 # sigma -> implied volatility   sigma>0
 
-D = 1
+
 N = norm.cdf
 
 def d1(F, K, T, sigma):
     return (np.log(F / K) + 0.5 * sigma**2 * T) / (sigma * np.sqrt(T))
 
-def bs_call(F,K,T,sigma):
+def bs_call(F,K,T,sigma,r):
 
     if T<=0: 
         return max(F-K,0)
@@ -25,9 +25,23 @@ def bs_call(F,K,T,sigma):
     d1_value = d1(F,K,T,sigma)
     d2_value = d1_value - sigma * np.sqrt(T)
 
-    C = D*(F * N(d1_value) - K * N(d2_value))
+    discount = np.exp(-r*T)
+    C = discount*(F * N(d1_value) - K * N(d2_value))
 
     return C
+
+def bs_put(F,K,T,sigma,r):
+    if T<=0: 
+        return max(F-K,0)
+    if sigma<=0:
+        return max(F-K,0)
+    
+    d1_value = d1(F,K,T,sigma)
+    d2_value = d1_value - sigma * np.sqrt(T)
+
+    discount = np.exp(-r*T)
+    return discount * (K * N(-d2_value) - F * N (-d1_value))
+
 
 def vega(F, K, T, sigma):
     d1_value = d1(F, K, T, sigma)
