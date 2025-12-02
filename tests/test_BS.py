@@ -27,4 +27,6 @@ def test_oneway_BS():
 
             assert np.isclose(our_call_model, call_expected, atol=1e-5), f">>> CALL model does NOT return expected value in {sheet} <<<"
             assert np.isclose(our_put_model, put_expected, atol=1e-5), f">>> PUT model does NOT return expected value in {sheet} <<<"
+            # for the atol, keep it at a reasonalbly small but not too small as excel and computer noise is likely getting involved at 
+            # approx 1e-08 which will make all tests fail when they are actually good.
 

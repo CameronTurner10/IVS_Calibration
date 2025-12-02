@@ -32,23 +32,23 @@ def bs_call(F,K,T,sigma,r):
 
 def bs_put(F,K,T,sigma,r):
     if T<=0: 
-        return max(F-K,0)
+        return max(K-F,0)
     if sigma<=0:
-        return max(F-K,0)
+        return max(K-F,0)
     
     d1_value = d1(F,K,T,sigma)
     d2_value = d1_value - sigma * np.sqrt(T)
 
     discount = np.exp(-r*T)
-    return discount * (K * N(-d2_value) - F * N (-d1_value))
+    return discount * (K * N(-d2_value) - F * N(-d1_value))
 
 
 def vega(F, K, T, sigma):
     d1_value = d1(F, K, T, sigma)
     return F * np.sqrt(T) * norm.pdf(d1_value)
 
-def f_sigma(sigma, F, K, T, market_price):
-    return bs_call(F, K, T, sigma) - market_price
+def f_sigma(sigma, F, K, T, r, market_price):
+    return bs_call(F, K, T, sigma,r) - market_price
 
 
 if __name__ == "__main__":
