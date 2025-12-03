@@ -1,23 +1,13 @@
 import numpy as np
+from src.utils.black_scholes import bs_call, bs_put
+from scipy.optimize import brentq
 
-def f(x):
-    return x**2 -2
-
-def df(x):
-    return 2*x
-
-def Newton_Raphson(f,df,x0,tol,iterations):
-    x=x0
-    for i in range(iterations):
-
-        if df(x) == 0:
-            return None
-        
-        x = x - f(x)/df(x)
-        
-        if abs(f(x))<tol:
-            return x
-    return x
-
-Root=Newton_Raphson(f,df,1,1e-6,100)
-print(Root)
+def implied_vol(F,K,T,r,market_price,option_type="call"):
+    
+    def f_sigma(sigma,):
+        if option_type=="call":
+            return bs_call(F,K,T,sigma,r)-market_price
+        else:
+            return bs_put(F,K,T,sigma,r)-market_price
+    
+    return brentq(f_sigma,1e-10,5)
