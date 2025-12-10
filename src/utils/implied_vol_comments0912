@@ -12,14 +12,13 @@ def implied_vol(F, K, T, r, market_price, option_type="call"):
     if T < 0.01:
         unfavourable = True
 
-    # Condition 3- d1/d2 large
-    sigma_guess = 0.3
-    if T > 0: 
-        denom = sigma_guess * np.sqrt(T)
-        d1 = (x / denom) + 0.5 * denom
-        d2 = d1 - denom
-        if abs(d1) > 6 or abs(d2) > 6:
-            unfavourable = True
+     # Condition 3- d1, d2 large
+    if abs(d1) > threshold:
+        unfavourable = True
+        # add solution
+    if abs(d2) > threshold:
+        unfavourable = True
+        # add solution
 
     #if unfavourable:
      #   print('Unfavourable')
