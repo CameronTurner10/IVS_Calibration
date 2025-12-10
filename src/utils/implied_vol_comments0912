@@ -1,5 +1,8 @@
-def implied_vol(F, K, T, r, market_price, threshold, option_type="call"):
+def implied_vol(F, K, T, r, market_price, threshold, sigma, option_type="call"):
     unfavourable = False
+    #d1 = d1(F, K, T, sigma) if we make function public could use that instead of equation
+    d1 = (np.log(F / K) + 0.5 * sigma**2 * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
 
     # Condition 1- Deep in money calls (F>>K)
     x = np.log(F / K)
