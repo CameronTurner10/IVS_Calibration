@@ -1,0 +1,35 @@
+def implied_vol(F, K, T, r, market_price, option_type="call"):
+    unfavourable = False
+
+    # Condition 1- Deep in money calls (F>>K)
+    x = np.log(F / K)
+    if option_type == "call" and x > 0.5:
+        unfavourable = True
+    if option_type == "put" and x < -0.5:
+        unfavourable = True
+
+    # Condition 2- Short maturity time
+    if T < 0.01:
+        unfavourable = True
+
+    # Condition 3- d1/d2 large
+    sigma_guess = 0.3
+    if T > 0: 
+        denom = sigma_guess * np.sqrt(T)
+        d1 = (x / denom) + 0.5 * denom
+        d2 = d1 - denom
+        if abs(d1) > 6 or abs(d2) > 6:
+            unfavourable = True
+
+    #if unfavourable:
+     #   print('Unfavourable')
+     # then insert solution for each condition
+
+    
+    def f_sigma(sigma):
+        if option_type == "call":
+            return bs_call(F, K, T, sigma, r) - market_price
+        else:
+            return bs_put(F, K, T, sigma, r) - market_price
+
+    return brentq(f_sigma, 1e-10, 5)
