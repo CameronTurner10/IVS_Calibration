@@ -55,14 +55,15 @@ if __name__ == "__main__":
     F = 5000
     T = 0.25
     sigma = 0.20
+    r = 0.05
 
-    example_p = bs_call(F, 5000, T, sigma)
+    example_p = bs_call(F, 5000, T, sigma, r)
     print(f"The call price at a strike price of 5500 is {example_p}")
 
     strikes = np.linspace(4500, 6000, 100)
     prices = []
     for K in strikes:
-        price = bs_call(F, K, T, sigma)
+        price = bs_call(F, K, T, sigma, r)
         prices.append(price)
 
     plt.plot(strikes, prices)
