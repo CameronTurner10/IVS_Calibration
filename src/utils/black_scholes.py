@@ -43,9 +43,9 @@ def bs_put(F,K,T,sigma,r):
     return discount * (K * N(-d2_value) - F * N(-d1_value))
 
 
-def vega(F, K, T, sigma):
+def vega(F, K, T, sigma, r):
     d1_value = d1(F, K, T, sigma)
-    return F * np.sqrt(T) * norm.pdf(d1_value)
+    return np.exp(-r * T) * F * np.sqrt(T) * norm.pdf(d1_value)
 
 def f_sigma(sigma, F, K, T, r, market_price):
     return bs_call(F, K, T, sigma,r) - market_price
