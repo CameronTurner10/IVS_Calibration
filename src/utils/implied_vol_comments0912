@@ -1,4 +1,4 @@
-def implied_vol(F, K, T, r, market_price, threshold, sigma, option_type="call", var_level, tail_rate, x_crit):
+def implied_vol(F, K, T, r, market_price, threshold, sigma, option_type="call", var_level, tail_rate, x_crit, T_min):
     d1 = (np.log(F / K) + 0.5 * sigma**2 * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
 
@@ -14,20 +14,14 @@ def implied_vol(F, K, T, r, market_price, threshold, sigma, option_type="call", 
         return sigma = sigma_new
 
     # Condition 2- Short maturity time
-    if T < 0.01:
-        unfavourable = True
+    if T < T_min:
+        # find a solution
 
      # Condition 3- d1, d2 large
     if abs(d1) > threshold:
-        unfavourable = True
         # add solution
     if abs(d2) > threshold:
-        unfavourable = True
         # add solution
-
-    #if unfavourable:
-     #   print('Unfavourable')
-     # then insert solution for each condition
 
     
     def f_sigma(sigma):
