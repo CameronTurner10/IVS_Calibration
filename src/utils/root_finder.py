@@ -1,42 +1,37 @@
-# Implied vol solver using Brent's method
-# 
-# TODO B1: Fix for deep ITM options using OTM switching
-# Problem: when F >> K (deep ITM call), the solver fails because 
-# the price is mostly intrinsic value and not sensitive to vol.
-# Solution: use put-call parity to get the OTM put price instead:
-#   P = C - exp(-r*T) * (F - K)
-# Then solve for vol using the put.
-
 import numpy as np
 from src.utils.black_scholes import bs_call, bs_put
 from scipy.optimize import brentq
 
 
 def implied_vol(F, K, T, r, market_price, option_type="call"):
+
+    disc_factor = np.exp(-r * T)
     
-    # TODO B1: Add OTM switching logic here
-    # If call is ITM (F > K), switch to put using parity
-    # If put is ITM (F < K), switch to call using parity
-    #
-    # df = np.exp(-r * T)
-    # if option_type == "call" and F > K:
-    #     # deep ITM call - use put instead
-    #     put_price = market_price - df * (F - K)
-    #     solve_type = "put"
-    #     solve_price = put_price
-    # elif option_type == "put" and F < K:
-    #     # deep ITM put - use call instead  
-    #     call_price = market_price + df * (F - K)
-    #     solve_type = "call"
-    #     solve_price = call_price
-    # else:
-    #     solve_type = option_type
-    #     solve_price = market_price
+    #switching
+    if option_type == "call" and F > K:
+        # if ITM call -> use OTM put P = C - disc_factor * (F - K)
+        solve_price = market_price - disc_factor * (F - K)
+        solve_type = "put"
+    elif option_type == "put" and F < K:
+        # if ITM put -> use OTM call C = P + disc_factor * (F - K)
+        solve_price = market_price + disc_factor * (F - K)
+        solve_type = "call"
+    else:
+        solve_price = market_price
+        solve_type = option_type
+    if solve_price < 1e-9:
+        return np.nan
     
     def f_sigma(sigma):
-        if option_type == "call":
-            return bs_call(F, K, T, sigma, r) - market_price
+        if solve_type == "call":
+            return bs_call(F, K, T, sigma, r) - solve_price
         else:
-            return bs_put(F, K, T, sigma, r) - market_price
-    
-    return brentq(f_sigma, 1e-10, 5)
+            return bs_put(F, K, T, sigma, r) - solve_price
+    try:
+        return brentq(f_sigma, 1e-10, 5.0)
+    except ValueError:
+        return np.nan
+
+# We switchin between calls and puts using call–put parity to avoid numerically unstable
+#deep ITM or deep OTM prices and to ensure a robust implied volatility root-finding.
+
