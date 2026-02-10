@@ -1,24 +1,30 @@
-# Plotting for visualising the fits
-# TODO C1: add functions to plot market data vs fitted curves
-
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+
+def plot_svi_fit(k, market_iv, svi_model, T):
+    k_grid = np.linspace(min(k), max(k), 200)
+    iv_fit = svi_model.svi_implied_vol(k_grid, T)
+
+    plt.figure()
+    plt.scatter(k, market_iv, label="Market IV", color="black")
+    plt.plot(k_grid, iv_fit, label="SVI fit", color="red")
+    plt.xlabel("Strike k")
+    plt.ylabel("Implied volatility")
+    plt.legend()
+    plt.title("SVI Fit vs Market Data")
+    plt.grid(True)
+    plt.show()
+
+if __name__ == "__main__":
+    import numpy as np
+    from svi.implementation.svi_model import SVI
+
+    k_data = np.linspace(-0.3, 0.3, 20)
+    market_iv = 0.2 + 0.05 * k_data**2   # dummy smile
+    T = 0.5
+
+    svi = SVI(a=0.04, b=0.2, rho=-0.4, m=0.0, sigma=0.2)
+
+    plot_svi_fit(k_data, market_iv, svi, T)
 
 
-def plot_slice(strikes, market_vols, fitted_vols=None, title="Vol Smile"):
-    """
-    Plot market vols as red dots, fitted vols as blue line
-    """
-    # TODO C1: implement this
-    # plt.figure(figsize=(10, 6))
-    # plt.scatter(strikes, market_vols, color='red', label='Market')
-    # if fitted_vols is not None:
-    #     plt.plot(strikes, fitted_vols, 'b-', label='Fitted')
-    # plt.xlabel('Strike')
-    # plt.ylabel('Implied Vol')
-    # plt.title(title)
-    # plt.legend()
-    # plt.grid(True)
-    # plt.show()
-    
-    raise NotImplementedError("Not done yet")
