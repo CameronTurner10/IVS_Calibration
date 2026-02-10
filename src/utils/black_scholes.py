@@ -43,26 +43,25 @@ def bs_put(F,K,T,sigma,r):
     return discount * (K * N(-d2_value) - F * N(-d1_value))
 
 
-def vega(F, K, T, sigma):
+def vega(F, K, T, sigma, r):
     d1_value = d1(F, K, T, sigma)
-    return F * np.sqrt(T) * norm.pdf(d1_value)
+    return np.exp(-r * T) * F * np.sqrt(T) * norm.pdf(d1_value)
 
-def f_sigma(sigma, F, K, T, r, market_price):
-    return bs_call(F, K, T, sigma,r) - market_price
 
 
 if __name__ == "__main__":
     F = 5000
     T = 0.25
     sigma = 0.20
+    r = 0.05
 
-    example_p = bs_call(F, 5000, T, sigma)
+    example_p = bs_call(F, 5000, T, sigma, r)
     print(f"The call price at a strike price of 5500 is {example_p}")
 
     strikes = np.linspace(4500, 6000, 100)
     prices = []
     for K in strikes:
-        price = bs_call(F, K, T, sigma)
+        price = bs_call(F, K, T, sigma, r)
         prices.append(price)
 
     plt.plot(strikes, prices)

@@ -1,0 +1,58 @@
+def implied_vol(F, K, T, r, market_price, sigma, option_type="call", var_level, tail_rate, x_crit, T_min, d_threshold=5.0, sigma_lower_bound=1e-10, sigma_upper_bound=5.0):
+    
+    x = np.log(F / K)
+    
+    # Condition 1: Deep in/out of the money (log-moneyness extremes)
+    # Based on Fengler's tail smoothing approach
+    is_deep_call_tail = (option_type == "call" and x > x_crit)
+    is_deep_put_tail = (option_type == "put" and x < x_crit)
+    
+    if is_deep_call_tail or is_deep_put_tail:
+        tot_imp_var = var_level + tail_rate * abs(x)
+        sigma_new = np.sqrt(tot_imp_var / T)
+        sigma = sigma_new
+    
+    # Condition 2: Short maturity time
+    # Fengler's short-term extrapolation
+    if T < T_min:
+        sigma_ATM = np.sqrt(var_level / T_min)
+        sigma_new = sigma_ATM * np.sqrt(T_min / T)
+        sigma = sigma_new
+        return sigma
+    
+    # issues with d1 and d2 not relating to condition 1
+    if not (is_deep_call_tail or is_deep_put_tail):
+        d1 = (np.log(F / K) + 0.5 * sigma**2 * T) / (sigma * np.sqrt(T))
+        d2 = d1 - sigma * np.sqrt(T)
+        
+        # Condition 3: Large d1/d2 (far from money asymptotic)
+        # Fengler's asymptotic extrapolation
+        need_asymptotic = False
+        sigma_new = sigma
+        
+        if abs(d1) > d_threshold:
+            need_asymptotic = True
+            is_ITM = (option_type == "call" and x > 0) or (option_type == "put" and x < 0)
+            
+            if is_ITM:
+                # extrapolate upward
+                sigma_new = sigma * (1 + d_threshold / abs(d1))
+            else:
+                # OTM extrapolate downward
+                sigma_new = sigma * (1 - d_threshold / abs(d1))
+                
+        elif abs(d2) > d_threshold:
+            need_asymptotic = True
+            sigma_new = sigma * (1 - np.sign(d2) * d_threshold / abs(d2))
+        
+        if need_asymptotic:
+            return np.clip(sigma_new, sigma_lower_bound, sigma_upper_bound)
+    
+    # Standard non special conditions
+    def f_sigma(sigma_val):
+        if option_type == "call":
+            return bs_call(F, K, T, sigma_val, r) - market_price
+        else:
+            return bs_put(F, K, T, sigma_val, r) - market_price
+    
+    return brentq(f_sigma, sigma_lower_bound, sigma_upper_bound)

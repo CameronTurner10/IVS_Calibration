@@ -56,8 +56,9 @@ def test_bs_call_parameter_scan_no_crash_and_bounds():
 
         # 2) check no-arbitrage bounds for a call on a forward
         discount = np.exp(-r * T)
-        lower_bound = max(F - K * discount, 0.0)
-        upper_bound = F  # call price cannot exceed F
+        # A call option's price must be between its minimum "intrinsic" value and the maximum possible value (the discounted forward price).
+        lower_bound = discount * max(F - K, 0.0)
+        upper_bound = discount * F 
 
         assert lower_bound - 1e-10 <= price <= upper_bound + 1e-10
 
@@ -78,9 +79,9 @@ def test_bs_put_parameter_scan_no_crash_and_bounds():
         assert np.isfinite(price)
 
         discount = np.exp(-r * T)
-        # For a put on a forward: 0 <= P <= K * discount
-        lower_bound = 0.0
-        upper_bound = K * discount
+        # A put option's price must be between its minimum "intrinsic" value and the maximum possible value (the discounted strike price).
+        lower_bound = discount * max(K - F, 0.0)
+        upper_bound = discount * K
 
         assert lower_bound - 1e-10 <= price <= upper_bound + 1e-10
 

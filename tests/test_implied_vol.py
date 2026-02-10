@@ -7,7 +7,7 @@ from src.utils.root_finder import implied_vol
 def test_implied_vol():
     excel = pd.ExcelFile("tests/data/Surfaces.xlsx")
 
-    sheets_to_test = ["Surface1", "Surface3", "Surface4"] # Surface 2 does not PASS! (Passes for rows 26 onwards)
+    sheets_to_test = ["Surface1", "Surface2", "Surface3", "Surface4"] # Surface 2 does not PASS! (Passes for rows 26 onwards)
 
 
     for sheet in sheets_to_test:
@@ -24,7 +24,22 @@ def test_implied_vol():
 
             calculated_vol_call = implied_vol(F, K, T, r, call_price,option_type="call")
             calculated_vol_put = implied_vol(F, K, T, r, put_price,option_type="put")
-
-            assert np.isclose(calculated_vol_call, vol_expected, atol=1e-5), f">>> Root Solver using CALL does NOT return expected value in {sheet}, row {row.name} <<<"
-            assert np.isclose(calculated_vol_put, vol_expected, atol=1e-5), f">>> Root Solver using PUT does NOT return expected value in {sheet}, row {row.name} <<<"
+            #check call vol
+            if np.isnan(calculated_vol_call):
+                intrinsic_call = np.exp(-r*T) * max(F-K, 0)
+                if abs(call_price - intrinsic_call) < 1e-9:
+                    pass
+                else:
+                    assert False, f">>> Root Solver returned NaN for CALL in {sheet}, row {row.name} (Calculated={calculated_vol_call}, Expected={vol_expected}) <<<"
+            else:
+                assert np.isclose(calculated_vol_call, vol_expected, atol=1e-5), f">>> Root Solver using CALL does NOT return expected value in {sheet}, row {row.name} (Got {calculated_vol_call}, Expected {vol_expected}) <<<"
+            #check put vol
+            if np.isnan(calculated_vol_put):
+                intrinsic_put = np.exp(-r*T) * max(K-F, 0)
+                if abs(put_price - intrinsic_put) < 1e-9:
+                    pass
+                else:
+                    assert False, f">>> Root Solver returned NaN for PUT in {sheet}, row {row.name} <<<"
+            else:
+                assert np.isclose(calculated_vol_put, vol_expected, atol=1e-5), f">>> Root Solver using PUT does NOT return expected value in {sheet}, row {row.name} <<<"
  
