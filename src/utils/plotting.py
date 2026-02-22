@@ -162,6 +162,54 @@ def plot_multi_slice(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type=
     plt.show()
 
 
+
+def plot_variance_heatmap(sheet_name, filepath="tests/data/Surfaces.xlsx"):
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    expiries = sorted(df["Year Fraction"].unique())
+
+    all_k = []
+    fitted = {}  # T -> params dict
+    for T in expiries:
+        strikes, market_vols, forward, k_values, _ = get_slice_from_data(T, sheet_name, filepath)
+        fitted[T] = fit_svi_slice(strikes, market_vols, T, forward)
+        all_k.extend(k_values.tolist())
+        
+    k_grid = np.linspace(min(all_k), max(all_k), 1000)
+    T_grid = np.linspace(min(expiries), max(expiries), 1000)
+    T_knots = np.array(expiries)
+
+    param_names = ["a", "b", "rho", "m", "sigma"]
+    param_curves = {}
+    for p in param_names:
+        column = []
+        for T in T_knots:
+            value = fitted[T][p]
+            column.append(value)
+        param_curves[p] = np.array(column)
+
+    W = np.zeros((len(T_grid), len(k_grid)))
+    for i, T in enumerate(T_grid):
+        a = np.interp(T, T_knots, param_curves["a"])
+        b = np.interp(T, T_knots, param_curves["b"])
+        rho = np.interp(T, T_knots, param_curves["rho"])
+        m = np.interp(T, T_knots, param_curves["m"])
+        sigma = np.interp(T, T_knots, param_curves["sigma"])
+        W[i, :] = total_variance(k_grid, a, b, rho, m, sigma)
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    cf = ax.contourf(k_grid, T_grid, W, levels=40, cmap="RdYlGn_r")
+    fig.colorbar(cf, ax=ax, label="Total implied variance w(k, T)")
+
+    cl = ax.contour(k_grid, T_grid, W, levels=12, colors="black", linewidths=0.6, alpha=0.45)
+    ax.clabel(cl, inline=True, fontsize=7, fmt="%.4f", inline_spacing=4)
+
+    ax.set_xlabel("Log-moneyness k = log(K / F)")
+    ax.set_ylabel("Maturity T (years)")
+    ax.set_title(f"SVI Variance Surface — {sheet_name}", fontsize=13, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
+
+
 def list_available_data(filepath="tests/data/Surfaces.xlsx"):
     xl = pd.ExcelFile(filepath)
     data = {}
@@ -179,10 +227,10 @@ if __name__ == "__main__":
 
     #choose surface
     sheets = list(data.keys())
-    print("\nIndicate choice by entering a number and pressing enter.")
+    print("\nChoose a surface to plot, press enter.")
     print("\nAvailable surfaces:")
     for i, name in enumerate(sheets):
-        print(f"  [{i + 1}] {name}  ({len(data[name])} expiries)")
+        print(f"[{i + 1}] {name}  ({len(data[name])} expiries)")
 
     choice = input("\nSelect surface: ").strip()
     sheet_idx = int(choice) - 1 if choice else 0
@@ -193,11 +241,15 @@ if __name__ == "__main__":
     print(f"\nExpiries in {sheet_name}:")
     for i, T in enumerate(expiries):
         days = T * 365
-        print(f"  [{i + 1:>2}] T = {T:.6f}  (~{days:.0f} days)")
-    print(f"  [ 0] Plot ALL slices")
+        print(f"[{i + 1:>2}] T = {T:.6f}  (~{days:.0f} days)")
+    print(f"[ 0] Plot ALL slices")
 
-    choice = input("\nSelect expiry [0 = all]: ").strip()
-    expiry_idx = int(choice) if choice else 0
+    choice = input("\nSelect expiry [0 = all, H = heatmap]: ").strip()
+    if choice.upper() == "H":
+        print(f"\nPlotting variance heatmap for {sheet_name}")
+        plot_variance_heatmap(sheet_name, filepath)
+    else:
+        expiry_idx = int(choice) if choice else 0
 
     #choose plot type
     choice = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
