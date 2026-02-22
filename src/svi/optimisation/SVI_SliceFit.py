@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 from src.svi.implementation.svi_model import SVI
+from src.svi.optimisation.constraints import c_nonneg_min_total_var, c_wing_right, c_wing_left 
 
 def total_variance(k, a, b, rho, m, sigma): 
     return a + b * (rho * (k - m) + np.sqrt((k - m)**2 + sigma**2))
@@ -32,12 +33,19 @@ def fit_svi_slice(strikes, market_vols, T, forward):
         w_model = total_variance(k, a, b, rho, m, sigma)
         return np.sum((w_model - w_market) ** 2)
 
+    constraints = [
+        {'type': 'ineq', 'fun': c_nonneg_min_total_var},
+        {'type': 'ineq', 'fun': c_wing_right},
+        {'type': 'ineq', 'fun': c_wing_left},
+    ]    
+
     result = minimize(             # Minimisation of objective function
         svi_slice_objective,       # Objective function f(k,parameters)
         x0,                        # Initial Guess Parameters [a, b, rho, m, sigma]
         args=(k_values, w_market), # Extra arguments for the objective function 
         method='SLSQP',            # Method of Optimisation
-        bounds=bounds              # Bounds to prevent arbitrage
+        bounds=bounds,             # Bounds for numerical stability 
+        constraints=constraints    # Inequality constraints (basic no-arbitrage conditions) 
     )
     
     return dict(zip(['a','b','rho','m','sigma'], result.x))
