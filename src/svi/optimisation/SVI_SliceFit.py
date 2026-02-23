@@ -21,7 +21,7 @@ def fit_svi_slice(strikes, market_vols, T, forward):
     # Bounds to prevent arbitrage
     bounds = [
         (0.001, 1.0),      # a
-        (0.001, 2.0),      # b
+        (0.001, 0.99),      # b
         (-0.99, 0.99),     # rho
         (-0.5, 0.5),       # m
         (0.01, 1.0),       # sigma
@@ -41,13 +41,6 @@ def fit_svi_slice(strikes, market_vols, T, forward):
     )
     
     return dict(zip(['a','b','rho','m','sigma'], result.x))
-
-
-
-
-
-
-
 
 
 def fit_svi_surface(strikes, maturities, total_variances):

@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from src.svi.optimisation.SVI_SliceFit import fit_svi_slice, total_variance
+from mpl_toolkits.mplot3d import Axes3D
 
 """
 This section is responsible for plotting the SVI calibration results.
@@ -161,7 +162,88 @@ def plot_multi_slice(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type=
     plt.tight_layout()
     plt.show()
 
+def plot_interpolated_surface(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="total_var"):
+    
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    expiries = sorted(df["Year Fraction"].unique())
 
+    all_k = []
+    fitted = {}  # T -> params dict
+    for T in expiries:
+        strikes, market_vols, forward, k_values, _ = get_slice_from_data(T, sheet_name, filepath)
+        fitted[T] = fit_svi_slice(strikes, market_vols, T, forward)
+        all_k.extend(k_values.tolist())
+        
+    k_grid = np.linspace(min(all_k), max(all_k), 1000)
+    T_grid = np.linspace(min(expiries), max(expiries), 1000)
+    T_knots = np.array(expiries)
+
+    param_names = ["a", "b", "rho", "m", "sigma"]
+    param_curves = {}
+    for p in param_names:
+        column = []
+        for T in T_knots:
+            value = fitted[T][p]
+            column.append(value)
+        param_curves[p] = np.array(column)
+
+    W = np.zeros((len(T_grid), len(k_grid)))
+    for i, T in enumerate(T_grid):
+        a = np.interp(T, T_knots, param_curves["a"])
+        b = np.interp(T, T_knots, param_curves["b"])
+        rho = np.interp(T, T_knots, param_curves["rho"])
+        m = np.interp(T, T_knots, param_curves["m"])
+        sigma = np.interp(T, T_knots, param_curves["sigma"])
+        W[i, :] = total_variance(k_grid, a, b, rho, m, sigma)
+
+    K_mesh, T_mesh = np.meshgrid(k_grid, T_grid) #convert 1D arrays to 2D grids
+
+
+    fig= plt.figure(figsize=(11, 6))
+    ax = fig.add_subplot(111,projection="3d")
+    surface = ax.plot_surface(K_mesh,T_mesh,W)
+
+    ax.set_xlabel("Log-moneyness k = log(K / F)")
+    ax.set_ylabel("Maturity T (years)")
+    ax.set_zlabel("Total implied variance w(k,T)")
+    ax.set_title(f"SVI Variance Surface — {sheet_name}", fontsize=13, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
+
+def plot_surface(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="total_var"):
+    
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    expiries = sorted(df["Year Fraction"].unique())
+
+    all_k = []
+    fitted = {}  # T -> params dict
+    for T in expiries:
+        strikes, market_vols, forward, k_values, _ = get_slice_from_data(T, sheet_name, filepath)
+        fitted[T] = fit_svi_slice(strikes, market_vols, T, forward)
+        all_k.extend(k_values.tolist())
+        
+    k_grid = np.linspace(min(all_k), max(all_k), 1000)
+    T_knots = np.array(expiries)
+
+
+    W = np.zeros((len(T_knots), len(k_grid)))
+    for i, T in enumerate(T_knots):
+        params=fitted[T]
+        W[i, :] = total_variance(k_grid, **params)
+
+    K_mesh, T_mesh = np.meshgrid(k_grid, T_knots) #convert 1D arrays to 2D grids
+
+
+    fig= plt.figure(figsize=(11, 6))
+    ax = fig.add_subplot(111,projection="3d")
+    surface = ax.plot_surface(K_mesh,T_mesh,W)
+
+    ax.set_xlabel("Log-moneyness k = log(K / F)")
+    ax.set_ylabel("Maturity T (years)")
+    ax.set_zlabel("Total implied variance w(k,T)")
+    ax.set_title(f"SVI Variance Surface — {sheet_name}", fontsize=13, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
 
 def plot_variance_heatmap(sheet_name, filepath="tests/data/Surfaces.xlsx"):
     df = pd.read_excel(filepath, sheet_name=sheet_name)
@@ -244,10 +326,14 @@ if __name__ == "__main__":
         print(f"[{i + 1:>2}] T = {T:.6f}  (~{days:.0f} days)")
     print(f"[ 0] Plot ALL slices")
 
-    choice = input("\nSelect expiry [0 = all, H = heatmap]: ").strip()
+    choice = input("\nSelect expiry [0 = all, H = heatmap, S = surface]: ").strip()
     if choice.upper() == "H":
         print(f"\nPlotting variance heatmap for {sheet_name}")
         plot_variance_heatmap(sheet_name, filepath)
+    if choice.upper() == "S":
+        print(f"\nPlotting variance surface for {sheet_name}")
+        plot_interpolated_surface(sheet_name, filepath)
+
     else:
         expiry_idx = int(choice) if choice else 0
 
