@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from src.svi.optimisation.SVI_SliceFit import fit_svi_slice, total_variance
+from src.svi.optimisation.local_optimizers import fit_svi_slice, total_variance
 from mpl_toolkits.mplot3d import Axes3D
 
 """
@@ -12,7 +12,7 @@ Incorporated is a CLI style interface to allow for easy plotting of the SVI cali
     so just follow the messages in the terminal.
 Close the plot manually to continue with the next plot.
 """
-
+# poetry run python -m src.utils.plotting
 
 def get_slice_from_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
     df = pd.read_excel(filepath, sheet_name=sheet_name)
