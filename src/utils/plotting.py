@@ -12,7 +12,7 @@ Incorporated is a CLI style interface to allow for easy plotting of the SVI cali
     so just follow the messages in the terminal.
 Close the plot manually to continue with the next plot.
 """
-# poetry run python -m src.utils.plotting
+
 
 def get_slice_from_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
     df = pd.read_excel(filepath, sheet_name=sheet_name)
@@ -151,7 +151,6 @@ def plot_multi_slice(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type=
 
     y_label = "Implied Volatility (σ)" if plot_type == "iv" else "Total Implied Variance (w)"
     ax_main.set_ylabel(y_label)
-    ax_main.set_yscale("log")
     ax_main.legend(loc="upper right", fontsize=7, ncol=3)
     ax_main.grid(True, alpha=0.3)
 
@@ -316,11 +315,7 @@ if __name__ == "__main__":
         print(f"[{i + 1}] {name}  ({len(data[name])} expiries)")
 
     choice = input("\nSelect surface: ").strip()
-    try:
-        sheet_idx = int(choice) - 1 if choice else 0
-    except ValueError:
-        print("Invalid input, defaulting to surface 1.")
-        sheet_idx = 0
+    sheet_idx = int(choice) - 1 if choice else 0
     sheet_name = sheets[sheet_idx]
 
     #choose expiry
@@ -337,7 +332,7 @@ if __name__ == "__main__":
         plot_variance_heatmap(sheet_name, filepath)
     if choice.upper() == "S":
         print(f"\nPlotting variance surface for {sheet_name}")
-        plot_interpolated_surface(sheet_name, filepath)
+        plot_surface(sheet_name, filepath)
 
     else:
         expiry_idx = int(choice) if choice else 0
