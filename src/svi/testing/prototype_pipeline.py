@@ -18,9 +18,10 @@ def load_slice(filepath, sheet_name, T):
     forward = slice_df["Forward"].iloc[0]
     return strikes, market_vols, forward
 
-def rmse(params, k_values, w_market):
+def rmse(params, k_values, market_vols, T):
     w_fit = total_variance(k_values, **params)
-    return float(np.sqrt(np.mean((w_fit - w_market) ** 2)))
+    iv_fit = np.sqrt(np.maximum(w_fit, 0) / T)
+    return float(np.sqrt(np.mean((iv_fit - market_vols) ** 2)))
 
 def run_prototype():
     print("Started")
@@ -56,7 +57,7 @@ def run_prototype():
                 t1 = time.perf_counter()
                 
                 g_time = t1 - t0
-                g_rmse = rmse(g_params, k_values, w_market)
+                g_rmse = rmse(g_params, k_values, market_vols, T)
                 x0 = [g_params['a'], g_params['b'], g_params['rho'], g_params['m'], g_params['sigma']]
                 
                 # 2. Local Step
@@ -65,7 +66,7 @@ def run_prototype():
                     try:
                         res = minimize(svi_objective, x0, args=(k_values, w_market), method=l_method, bounds=SVI_BOUNDS)
                         l_params = dict(zip(['a', 'b', 'rho', 'm', 'sigma'], res.x))
-                        l_rmse = rmse(l_params, k_values, w_market)
+                        l_rmse = rmse(l_params, k_values, market_vols, T)
                     except:
                         l_rmse = float('nan')
                     t3 = time.perf_counter()
