@@ -22,9 +22,10 @@ def load_slice(filepath, sheet_name, T):
     forward = slice_df["Forward"].iloc[0]
     return strikes, market_vols, forward
 
-def rmse(params, k_values, w_market):
+def rmse(params, k_values, market_vols, T):
     w_fit = total_variance(k_values, **params)
-    return float(np.sqrt(np.mean((w_fit - w_market) ** 2)))
+    iv_fit = np.sqrt(np.maximum(w_fit, 0) / T)
+    return float(np.sqrt(np.mean((iv_fit - market_vols) ** 2)))
 
 # load all sheets and expiries
 xl = pd.ExcelFile(FILEPATH)
@@ -61,7 +62,7 @@ for sheet in sheets:
         for method_name, fit_function in LOCAL_METHODS.items():
             try:
                 params = fit_function(strikes, market_vols, T, forward)
-                score = rmse(params, k_values, w_market)
+                score = rmse(params, k_values, market_vols, T)
                 rmse_scores[method_name] = score
                 
                 # Store full data for Team 2's instability analysis
@@ -94,7 +95,7 @@ for sheet in sheets:
         for method_name, fit_fn in LOCAL_METHODS.items():
             try:
                 params = fit_fn(strikes, market_vols, T, forward)
-                score = rmse(params, k_values, w_market)
+                score = rmse(params, k_values, market_vols, T)
                 all_rmses[method_name].append(score)
             except:
                 pass
