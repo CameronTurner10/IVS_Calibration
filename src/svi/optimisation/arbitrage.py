@@ -2,14 +2,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from scipy.optimize import minimize, shgo
-
+from scipy.optimize import minimize, shgo, NonlinearConstraint
+from src.svi.optimisation.constraints import c_nonneg_min_total_var, c_wing_right, c_wing_left, c_butterfly_grid
 from src.svi.optimisation.local_optimizers import svi_objective, total_variance, SVI_BOUNDS
 
 # poetry run python -m src.svi.optimisation.arbitrage
 
 # SVI CALIBRATION
-# Jack's Butterfly constraints should be managed here also
 
 def get_slice_from_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
     df = pd.read_excel(filepath, sheet_name=sheet_name)
@@ -27,6 +26,13 @@ def get_slice_from_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
 def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=None):
     atm_var = np.mean(w_market)
     
+    # Build a reasonable k grid if not provided
+    if k_grid is None:
+        k_min = float(np.min(k_values))
+        k_max = float(np.max(k_values))
+        pad = 0.5
+        k_grid = np.linspace(k_min - pad, k_max + pad, 201)
+
     constraints = []
     
     # 1. Calendar Constraint: physical boundary from the strictly longer maturity slice
@@ -36,8 +42,26 @@ def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=
             return w_longer_bound - w_curr
         constraints.append({"type":"ineq", "fun": calendar_constraint_fun})
         
-    # TODO(Jack): BUTTERFLY ARBITRAGE CONSTRAINT
+    # 2. Basic slice-wise no-arbitrage constraints
+    constraints.append(
+        NonlinearConstraint(c_nonneg_min_total_var, lb=0.0, ub=np.inf)
+    )
+    constraints.append(
+        NonlinearConstraint(c_wing_right, lb=0.0, ub=np.inf)
+    )
+    constraints.append(
+        NonlinearConstraint(c_wing_left, lb=0.0, ub=np.inf)
+    )
 
+    # 3. Butterfly arbitrage constraint: enforce g(k) >= 0 over the k_grid
+    eps= 1e-8
+    constraints.append(
+        NonlinearConstraint(
+            lambda p: c_butterfly_grid(p, k_grid, eps),
+            lb=0.0, 
+            ub=np.inf
+        )
+    )
 
     x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]
     
