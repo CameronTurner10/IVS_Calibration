@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from scipy.optimize import minimize, shgo, NonlinearConstraint
+from scipy.optimize import minimize, differential_evolution, NonlinearConstraint
 from src.svi.optimisation.constraints import c_nonneg_min_total_var, c_wing_right, c_wing_left, c_butterfly_grid
 from src.svi.optimisation.local_optimizers import svi_objective, total_variance, SVI_BOUNDS
 
@@ -40,7 +40,7 @@ def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=
         def calendar_constraint_fun(p):
             w_curr = total_variance(k_grid, *p)
             return w_longer_bound - w_curr
-        constraints.append({"type":"ineq", "fun": calendar_constraint_fun})
+        constraints.append(NonlinearConstraint(calendar_constraint_fun, lb=0.0, ub=np.inf))
         
     # 2. Basic slice-wise no-arbitrage constraints
     constraints.append(
@@ -66,25 +66,26 @@ def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=
     x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]
     
     try:
-        shgo_res = shgo(
+        de_res = differential_evolution(
             svi_objective, 
             bounds=SVI_BOUNDS, 
             args=(k_values, w_market), 
             constraints=constraints,
-            options={"disp": False}
+            seed=42,
+            polish=False
         )
-        if hasattr(shgo_res, 'x') and len(shgo_res.x) == 5:
-            x0 = shgo_res.x
+        if hasattr(de_res, 'x') and len(de_res.x) == 5:
+            x0 = de_res.x
     except Exception as e:
         # Fallback to standard x0 if global fails for some reason
         pass
         
-    # Polishing with trust-constr
+    # Polishing with SLSQP
     res = minimize(
         svi_objective,
         x0,
         args=(k_values, w_market),
-        method="trust-constr",
+        method="SLSQP",
         bounds=SVI_BOUNDS,
         constraints=constraints
     )
@@ -127,6 +128,9 @@ def calibrate_surface(sheet_name, filepath="tests/data/Surfaces.xlsx"):
         w_longer_bound = total_variance(k_grid, *params_list)
 
     return fitted_slices
+
+
+""""
 
 def plot_calibrated_surface(sheet_name, filepath="tests/data/Surfaces.xlsx"):
     fitted_slices = calibrate_surface(sheet_name, filepath)
@@ -175,7 +179,7 @@ if __name__ == "__main__":
 
 # backup: cameron's original simultaneous multi-slice calibration script
 
-"""
+
 # SVI fitting using scipy - local optimisation methods
 # Goal: find the 5 params (a, b, rho, m, sigma) that best match market data
 import pandas as pd

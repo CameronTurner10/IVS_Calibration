@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from src.svi.optimisation.local_optimizers import fit_svi_slice, total_variance
+from src.svi.optimisation.arbitrage import calibrate_surface, fit_single_slice_with_bound
 from mpl_toolkits.mplot3d import Axes3D
 
 """
@@ -30,12 +31,7 @@ def get_slice_from_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
 def plot_single_slice(T, sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="total_var"):
     strikes, market_vols, forward, k_values, w_market = get_slice_from_data(T, sheet_name, filepath)
 
-    fitted_params = fit_svi_slice(
-        strikes=strikes,
-        market_vols=market_vols,
-        T=T,
-        forward=forward
-    )
+    fitted_params = fit_single_slice_with_bound(k_values, w_market)
 
     k_grid = np.linspace(min(k_values), max(k_values), 200)
     w_fitted_grid = total_variance(k_grid, **fitted_params)
@@ -115,15 +111,12 @@ def plot_multi_slice(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type=
     )
     fig.suptitle(f"SVI Multi-Slice Calibration — {sheet_name}", fontsize=14, fontweight="bold")
 
+    fitted = calibrate_surface(sheet_name, filepath)
+
     for i, T in enumerate(expiries):
         strikes, market_vols, forward, k_values, w_market = get_slice_from_data(T, sheet_name, filepath)
 
-        fitted_params = fit_svi_slice(
-            strikes=strikes,
-            market_vols=market_vols,
-            T=T,
-            forward=forward
-        )
+        fitted_params = fitted[T]
 
         k_grid = np.linspace(min(k_values), max(k_values), 200)
         w_fitted_grid = total_variance(k_grid, **fitted_params)
@@ -151,6 +144,7 @@ def plot_multi_slice(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type=
 
     y_label = "Implied Volatility (σ)" if plot_type == "iv" else "Total Implied Variance (w)"
     ax_main.set_ylabel(y_label)
+    ax_main.set_yscale('log')
     ax_main.legend(loc="upper right", fontsize=7, ncol=3)
     ax_main.grid(True, alpha=0.3)
 
@@ -168,10 +162,9 @@ def plot_interpolated_surface(sheet_name, filepath="tests/data/Surfaces.xlsx", p
     expiries = sorted(df["Year Fraction"].unique())
 
     all_k = []
-    fitted = {}  # T -> params dict
+    fitted = calibrate_surface(sheet_name, filepath)
     for T in expiries:
         strikes, market_vols, forward, k_values, _ = get_slice_from_data(T, sheet_name, filepath)
-        fitted[T] = fit_svi_slice(strikes, market_vols, T, forward)
         all_k.extend(k_values.tolist())
         
     k_grid = np.linspace(min(all_k), max(all_k), 1000)
@@ -216,10 +209,9 @@ def plot_surface(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="tot
     expiries = sorted(df["Year Fraction"].unique())
 
     all_k = []
-    fitted = {}  # T -> params dict
+    fitted = calibrate_surface(sheet_name, filepath)
     for T in expiries:
         strikes, market_vols, forward, k_values, _ = get_slice_from_data(T, sheet_name, filepath)
-        fitted[T] = fit_svi_slice(strikes, market_vols, T, forward)
         all_k.extend(k_values.tolist())
         
     k_grid = np.linspace(min(all_k), max(all_k), 1000)
@@ -250,10 +242,9 @@ def plot_variance_heatmap(sheet_name, filepath="tests/data/Surfaces.xlsx"):
     expiries = sorted(df["Year Fraction"].unique())
 
     all_k = []
-    fitted = {}  # T -> params dict
+    fitted = calibrate_surface(sheet_name, filepath)
     for T in expiries:
         strikes, market_vols, forward, k_values, _ = get_slice_from_data(T, sheet_name, filepath)
-        fitted[T] = fit_svi_slice(strikes, market_vols, T, forward)
         all_k.extend(k_values.tolist())
         
     k_grid = np.linspace(min(all_k), max(all_k), 1000)
@@ -330,22 +321,21 @@ if __name__ == "__main__":
     if choice.upper() == "H":
         print(f"\nPlotting variance heatmap for {sheet_name}")
         plot_variance_heatmap(sheet_name, filepath)
-    if choice.upper() == "S":
+    elif choice.upper() == "S":
         print(f"\nPlotting variance surface for {sheet_name}")
         plot_surface(sheet_name, filepath)
-
     else:
         expiry_idx = int(choice) if choice else 0
 
-    #choose plot type
-    choice = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
-    plot_type = "iv" if choice == "2" else "total_var"
+        #choose plot type
+        choice2 = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
+        plot_type = "iv" if choice2 == "2" else "total_var"
 
-    #plot
-    if expiry_idx == 0:
-        print(f"\nFitting all {len(expiries)} slices in {sheet_name}")
-        plot_multi_slice(sheet_name, filepath, plot_type=plot_type)
-    else:
-        T = expiries[expiry_idx - 1]
-        print(f"\nFitting for T = {T:.6f}")
-        plot_single_slice(T, sheet_name, filepath, plot_type=plot_type)
+        #plot
+        if expiry_idx == 0:
+            print(f"\nFitting all {len(expiries)} slices in {sheet_name}")
+            plot_multi_slice(sheet_name, filepath, plot_type=plot_type)
+        else:
+            T = expiries[expiry_idx - 1]
+            print(f"\nFitting for T = {T:.6f}")
+            plot_single_slice(T, sheet_name, filepath, plot_type=plot_type)
