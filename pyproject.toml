@@ -12,7 +12,8 @@ dependencies = [
     "scipy",
     "matplotlib",
     "pandas",
-    "jupyter"
+    "jupyter",
+    "quantlib (>=1.41,<2.0)"
 ]
 
 [tool.poetry]
