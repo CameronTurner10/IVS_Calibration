@@ -23,7 +23,7 @@ def get_slice_from_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
     w_market = market_vols ** 2 * T
     return strikes, market_vols, forward, k_values, w_market
 
-def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=None):
+def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=None, initial_params=None):
     atm_var = np.mean(w_market)
     
     # Build a reasonable k grid if not provided
@@ -63,22 +63,25 @@ def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=
         )
     )
 
-    x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]
-    
-    try:
-        de_res = differential_evolution(
-            svi_objective, 
-            bounds=SVI_BOUNDS, 
-            args=(k_values, w_market), 
-            constraints=constraints,
-            seed=42,
-            polish=False
-        )
-        if hasattr(de_res, 'x') and len(de_res.x) == 5:
-            x0 = de_res.x
-    except Exception as e:
-        # Fallback to standard x0 if global fails for some reason
-        pass
+    if initial_params is not None:
+        x0 = [initial_params['a'], initial_params['b'], initial_params['rho'], initial_params['m'], initial_params['sigma']]
+    else:
+        x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]
+        
+        try:
+            de_res = differential_evolution(
+                svi_objective, 
+                bounds=SVI_BOUNDS, 
+                args=(k_values, w_market), 
+                constraints=constraints,
+                seed=42,
+                polish=False
+            )
+            if hasattr(de_res, 'x') and len(de_res.x) == 5:
+                x0 = de_res.x
+        except Exception as e:
+            # Fallback to standard x0 if global fails for some reason
+            pass
         
     # Polishing with SLSQP
     res = minimize(
@@ -113,6 +116,7 @@ def calibrate_surface(sheet_name, filepath="tests/data/Surfaces.xlsx"):
         
     k_grid = np.linspace(k_min, k_max, 200)
     w_longer_bound = None
+    prev_params = None
     
     for T in expiries:
         _, _, _, k_values, w_market = get_slice_from_data(T, sheet_name, filepath)
@@ -121,11 +125,12 @@ def calibrate_surface(sheet_name, filepath="tests/data/Surfaces.xlsx"):
             continue
             
         print(f"Plotting T={T:.4f}")
-        params_dict = fit_single_slice_with_bound(k_values, w_market, w_longer_bound, k_grid)
+        params_dict = fit_single_slice_with_bound(k_values, w_market, w_longer_bound, k_grid, initial_params=prev_params)
         fitted_slices[T] = params_dict
         
         params_list = [params_dict["a"], params_dict["b"], params_dict["rho"], params_dict["m"], params_dict["sigma"]]
         w_longer_bound = total_variance(k_grid, *params_list)
+        prev_params = params_dict
 
     return fitted_slices
 
