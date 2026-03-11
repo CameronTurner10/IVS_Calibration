@@ -6,11 +6,11 @@ from scipy.optimize import minimize
 
 # Bounds for the 5 SVI parameters - shared across all local methods
 SVI_BOUNDS = [
-    (0.001, 1.0),    # a
-    (0.001, 0.99),   # b
+    (1e-6, 5.0),     # a
+    (1e-6, 0.99),    # b
     (-0.99, 0.99),   # rho
-    (-0.5,  0.5),    # m
-    (0.01,  1.0),    # sigma
+    (-1.0,  1.0),    # m
+    (1e-4,  2.0),    # sigma
 ]
 
 def total_variance(k, a, b, rho, m, sigma):
