@@ -61,10 +61,13 @@ def run_prototype():
                 x0 = [g_params['a'], g_params['b'], g_params['rho'], g_params['m'], g_params['sigma']]
                 
                 # 2. Local Step
+                bounds = list(SVI_BOUNDS)
+                bounds[0] = (1e-8, float(np.max(w_market)))
+                
                 for l_method in local_methods:
                     t2 = time.perf_counter()
                     try:
-                        res = minimize(svi_objective, x0, args=(k_values, w_market), method=l_method, bounds=SVI_BOUNDS)
+                        res = minimize(svi_objective, x0, args=(k_values, w_market), method=l_method, bounds=bounds)
                         l_params = dict(zip(['a', 'b', 'rho', 'm', 'sigma'], res.x))
                         l_rmse = rmse(l_params, k_values, market_vols, T)
                     except:
