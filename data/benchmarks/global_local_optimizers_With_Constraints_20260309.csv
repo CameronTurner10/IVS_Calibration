@@ -1,0 +1,11 @@
+Global,Local,Avg IV RMSE,Time (s),Calendar Violations
+Diff-Evo,SLSQP,0.01545,4.9,0
+Diff-Evo (Polish),SLSQP,0.01652,5.0,0
+Dual-Ann,SLSQP,0.01662,2.7,0
+None,SLSQP,0.01919,0.9,0
+SHGO,SLSQP,0.02959,1.4,0
+None,trust-constr,0.23640,50.0,20
+Diff-Evo (Polish),trust-constr,0.24933,53.5,20
+SHGO,trust-constr,0.25711,46.8,21
+Diff-Evo,trust-constr,0.26473,46.3,21
+Dual-Ann,trust-constr,0.26634,49.0,24

@@ -280,8 +280,62 @@ def plot_variance_heatmap(sheet_name, filepath="tests/data/Surfaces.xlsx"):
     ax.set_ylabel("Maturity T (years)")
     ax.set_title(f"SVI Variance Surface — {sheet_name}", fontsize=13, fontweight="bold")
     plt.tight_layout()
-    plt.show()
 
+def _compute_log10_rmse_errors(sheet_name, filepath, sequential_init):
+    """Helper: calibrate the surface and return (expiry list, log10 RMSE list)."""
+    fitted = calibrate_surface(sheet_name, filepath, sequential_init=sequential_init)
+
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    expiries = sorted(df["Year Fraction"].unique())
+
+    ts, errors = [], []
+    for T in expiries:
+        _, market_vols, _, k_values, _ = get_slice_from_data(T, sheet_name, filepath)
+        if len(k_values) == 0 or T not in fitted or T <= 0:
+            continue
+        params = fitted[T]
+        w_fit = total_variance(k_values, **params)
+        iv_fit = np.sqrt(np.maximum(w_fit, 0.0) / T)
+        rmse_val = np.sqrt(np.mean((iv_fit - market_vols) ** 2))
+        errors.append(np.log10(max(rmse_val, 1e-16)))
+        ts.append(T)
+    return ts, errors
+
+
+def plot_error_log10_rmse(sheet_name, filepath="tests/data/Surfaces.xlsx", mode="both"):
+    """
+    Plot log10(RMSE) of implied volatility across expiries.
+    mode: 'sequential' = warm-start from prev slice (skips DE after slice 1)
+          'de'         = full DE global search on every slice independently
+          'both'       = overlay both curves for comparison
+    """
+    plt.figure(figsize=(12, 6))
+
+    if mode in ("sequential", "both"):
+        ts_seq, err_seq = _compute_log10_rmse_errors(sheet_name, filepath, sequential_init=True)
+        plt.plot(ts_seq, err_seq,
+                 color="darkblue", marker="+", markersize=8,
+                 linestyle="-", linewidth=0.9,
+                 label="Sequential init (warm-start)")
+
+    if mode in ("de", "both"):
+        ts_de, err_de = _compute_log10_rmse_errors(sheet_name, filepath, sequential_init=False)
+        plt.plot(ts_de, err_de,
+                 color="darkviolet", marker="x", markersize=8,
+                 linestyle="-", linewidth=0.9,
+                 label="Full DE per slice")
+
+    plt.xlabel("Expiry (year fraction)", fontsize=11)
+    plt.ylabel("log\u2081\u2080(RMSE of implied volatility)", fontsize=11)
+    plt.title(
+        f"SVI Fit Quality: log\u2081\u2080(RMSE) \u2014 {sheet_name}",
+        fontsize=13, fontweight="bold"
+    )
+    plt.grid(True, which="both", alpha=0.3)
+    plt.legend(loc="upper right", frameon=True, fontsize=9)
+    plt.gca().tick_params(direction="in", length=4)
+    plt.tight_layout()
+    plt.show()
 
 def list_available_data(filepath="tests/data/Surfaces.xlsx"):
     xl = pd.ExcelFile(filepath)
@@ -317,13 +371,23 @@ if __name__ == "__main__":
         print(f"[{i + 1:>2}] T = {T:.6f}  (~{days:.0f} days)")
     print(f"[ 0] Plot ALL slices")
 
-    choice = input("\nSelect expiry [0 = all, H = heatmap, S = surface]: ").strip()
+    choice = input("\nSelect expiry [0 = all, H = heatmap, S = surface, E = error]: ").strip()
     if choice.upper() == "H":
         print(f"\nPlotting variance heatmap for {sheet_name}")
         plot_variance_heatmap(sheet_name, filepath)
     elif choice.upper() == "S":
         print(f"\nPlotting variance surface for {sheet_name}")
         plot_surface(sheet_name, filepath)
+    elif choice.upper() == "E":
+        print("\nError plot mode:")
+        print("[1] Sequential init (warm-start from previous slice)")
+        print("[2] Full DE on every slice (slower, matches Jose's likely approach)")
+        print("[3] Both overlaid for comparison")
+        mode_choice = input("Select mode [1/2/3, default=3]: ").strip()
+        mode_map = {"1": "sequential", "2": "de", "3": "both", "": "both"}
+        mode = mode_map.get(mode_choice, "both")
+        print(f"\nPlotting log10(RMSE) error for {sheet_name} [{mode}]")
+        plot_error_log10_rmse(sheet_name, filepath, mode=mode)
     else:
         expiry_idx = int(choice) if choice else 0
 

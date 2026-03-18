@@ -63,6 +63,9 @@ def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=
         )
     )
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+    
     if initial_params is not None:
         x0 = [initial_params['a'], initial_params['b'], initial_params['rho'], initial_params['m'], initial_params['sigma']]
     else:
@@ -71,7 +74,7 @@ def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=
         try:
             de_res = differential_evolution(
                 svi_objective, 
-                bounds=SVI_BOUNDS, 
+                bounds=bounds, 
                 args=(k_values, w_market), 
                 constraints=constraints,
                 seed=42,
@@ -89,13 +92,13 @@ def fit_single_slice_with_bound(k_values, w_market, w_longer_bound=None, k_grid=
         x0,
         args=(k_values, w_market),
         method="SLSQP",
-        bounds=SVI_BOUNDS,
+        bounds=bounds,
         constraints=constraints
     )
     
     return dict(zip(["a", "b", "rho", "m", "sigma"], res.x))
 
-def calibrate_surface(sheet_name, filepath="tests/data/Surfaces.xlsx"):
+def calibrate_surface(sheet_name, filepath="tests/data/Surfaces.xlsx", sequential_init=True):
     print(f"Iterating Surface: {sheet_name}")
     df = pd.read_excel(filepath, sheet_name=sheet_name)
     
@@ -124,8 +127,10 @@ def calibrate_surface(sheet_name, filepath="tests/data/Surfaces.xlsx"):
         if len(k_values) == 0:
             continue
             
-        print(f"Plotting T={T:.4f}")
-        params_dict = fit_single_slice_with_bound(k_values, w_market, w_longer_bound, k_grid, initial_params=prev_params)
+        print(f"Calibrating T={T:.4f}")
+        # Pass prev_params only if sequential_init is enabled
+        initial = prev_params if sequential_init else None
+        params_dict = fit_single_slice_with_bound(k_values, w_market, w_longer_bound, k_grid, initial_params=initial)
         fitted_slices[T] = params_dict
         
         params_list = [params_dict["a"], params_dict["b"], params_dict["rho"], params_dict["m"], params_dict["sigma"]]
@@ -199,11 +204,11 @@ from src.svi.implementation.svi_model import SVI
 
 # Bounds for the 5 SVI parameters - shared across all local methods
 SVI_BOUNDS = [
-    (0.001, 1.0),    # a
-    (0.001, 0.99),   # b
+    (1e-8, 10.0),    # a (placeholder, ideally dynamic)
+    (1e-8, 5.0),     # b
     (-0.99, 0.99),   # rho
-    (-0.5,  0.5),    # m
-    (0.01,  1.0),    # sigma
+    (-10.0, 10.0),   # m
+    (0.0, 10.0),     # sigma
 ]
 
 def total_variance_cam(k, a, b, rho, m, sigma):

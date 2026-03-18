@@ -5,12 +5,13 @@ import pandas as pd
 from scipy.optimize import minimize
 
 # Bounds for the 5 SVI parameters - shared across all local methods
+# Note: 'a' upper bound is typically set to max(w_market) dynamically during fit
 SVI_BOUNDS = [
-    (1e-6, 5.0),     # a
-    (1e-6, 0.99),    # b
+    (1e-8, 10.0),    # a (placeholder upper bound, usually overridden)
+    (1e-8, 5.0),     # b
     (-0.99, 0.99),   # rho
-    (-1.0,  1.0),    # m
-    (1e-4,  2.0),    # sigma
+    (-10.0, 10.0),   # m
+    (0.0, 10.0),     # sigma
 ]
 
 def total_variance(k, a, b, rho, m, sigma):
@@ -31,12 +32,15 @@ def fit_svi_slsqp(strikes, market_vols, T, forward): #Sequential Least Squares P
     atm_var = np.mean(w_market)
     x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]  # [a, b, rho, m, sigma]
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+
     result = minimize(
         svi_objective,
         x0,
         args=(k_values, w_market),
         method="SLSQP",
-        bounds=SVI_BOUNDS
+        bounds=bounds
     )
 
     return dict(zip(["a", "b", "rho", "m", "sigma"], result.x))
@@ -49,12 +53,15 @@ def fit_svi_trust_region(strikes, market_vols, T, forward): #Trust Region Constr
     atm_var = np.mean(w_market)
     x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]  # [a, b, rho, m, sigma]
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+
     result = minimize(
         svi_objective,
         x0,
         args=(k_values, w_market),
         method="trust-constr",
-        bounds=SVI_BOUNDS
+        bounds=bounds
     )
 
     return dict(zip(["a", "b", "rho", "m", "sigma"], result.x))
@@ -67,12 +74,15 @@ def fit_svi_cobyqa(strikes, market_vols, T, forward): #Constrained Optimisation 
     atm_var = np.mean(w_market)
     x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]  # [a, b, rho, m, sigma]
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+
     result = minimize(
         svi_objective,
         x0,
         args=(k_values, w_market),
         method="COBYQA",
-        bounds=SVI_BOUNDS
+        bounds=bounds
     )
 
     return dict(zip(["a", "b", "rho", "m", "sigma"], result.x))

@@ -6,12 +6,13 @@ import numpy as np
 from scipy.optimize import differential_evolution, shgo, basinhopping, dual_annealing
 from src.svi.implementation.svi_model import SVI
 
+# Note: 'a' upper bound is typically set to max(w_market) dynamically during fit
 SVI_BOUNDS = [
-    (1e-6, 5.0),     # a
-    (1e-6, 0.99),    # b
+    (1e-8, 10.0),    # a (placeholder upper bound, usually overridden)
+    (1e-8, 5.0),     # b
     (-0.99, 0.99),   # rho
-    (-1.0,  1.0),    # m
-    (1e-4,  2.0),    # sigma
+    (-10.0, 10.0),   # m
+    (0.0, 10.0),     # sigma
 ]
 
 def total_variance(k, a, b, rho, m, sigma):
@@ -30,9 +31,12 @@ def fit_svi_de(strikes, market_vols, T, forward): # Differential Evolution doesn
     k_values = np.log(strikes / forward)
     w_market = market_vols ** 2 * T
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+
     result = differential_evolution(
         svi_objective,
-        bounds=SVI_BOUNDS,
+        bounds=bounds,
         args=(k_values, w_market),
         strategy='best1bin',
         maxiter=1000,
@@ -49,9 +53,12 @@ def fit_svi_shgo(strikes, market_vols, T, forward): # Simplicial Homology Global
     k_values = np.log(strikes / forward)
     w_market = market_vols ** 2 * T
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+
     result = shgo(
         svi_objective,
-        bounds=SVI_BOUNDS,
+        bounds=bounds,
         args=(k_values, w_market),
         n=200, # number of sampling points per iteration
         iters=3, # number of iterations of the homology growth
@@ -68,10 +75,13 @@ def fit_svi_basinhopping(strikes, market_vols, T, forward): # Basin Hopping with
     atm_var = np.mean(w_market)
     x0 = [atm_var, 0.1, 0.0, 0.0, 0.1]  # [a, b, rho, m, sigma]
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+
     minimizer_kwargs = {
         "method": "SLSQP",
         "args": (k_values, w_market),
-        "bounds": SVI_BOUNDS,
+        "bounds": bounds,
     }
 
     result = basinhopping(
@@ -90,14 +100,17 @@ def fit_svi_dual_annealing(strikes, market_vols, T, forward): # Dual Annealing
     k_values = np.log(strikes / forward)
     w_market = market_vols ** 2 * T
 
+    bounds = list(SVI_BOUNDS)
+    bounds[0] = (1e-8, float(np.max(w_market)))
+
     minimizer_kwargs = {
         "method": "SLSQP",
-        "bounds": SVI_BOUNDS,
+        "bounds": bounds,
     }
 
     result = dual_annealing(
         svi_objective,
-        bounds=SVI_BOUNDS,
+        bounds=bounds,
         args=(k_values, w_market),
         maxiter=1000,
         minimizer_kwargs=minimizer_kwargs,
