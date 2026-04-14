@@ -42,7 +42,7 @@ def build_Q_matrix(strikes: np.ndarray) -> np.ndarray:
 def build_R_matrix(strikes: np.ndarray) -> np.ndarray:
     """
     Build the (n-2) x (n-2) symmetric tridiagonal R matrix. Fengler eq 14.
-    Key property: gamma @ R @ gamma = integral of g''(u)^2 du.
+    Key property: gamma.T @ R @ gamma = integral of g''(u)^2 du.
     Returns np.ndarray shape (n-2, n-2).
     """
     n = len(strikes)
@@ -55,8 +55,8 @@ def build_R_matrix(strikes: np.ndarray) -> np.ndarray:
             R[i + 1, i] = h[i + 1] / 6
     return R
 
-"""
-Numbers for testing
+
+"""#Numbers for testing
 strikes = np.array([24779.535, 29735.442, 34691.349, 39647.256,
                     44603.163, 47081.117, 49559.070, 52037.024,
                     54514.977, 59470.884, 64426.791, 69382.698, 74338.605])
@@ -72,28 +72,48 @@ print(R[0, 0]) # ~ 3303.94
 print(R[0, 1]) # ~  825.98
 """
 
-def fit_smoothing_spline(
-    strikes: np.ndarray, call_prices: np.ndarray, lam: float, S: float, r: float, T: float, delta: float = 0.0
-) -> dict:
+def fit_smoothing_spline(strikes: np.ndarray, call_prices: np.ndarray, lam: float):
+    R=build_R_matrix(strikes)
+    Q=build_Q_matrix(strikes)
+    A=np.vstack([Q,-R.T]) 
+    n = len(call_prices)
+    I=np.identity(n)
+    #say you have (Q;R) this would be 
+    # (Q;R)=(Q11,Q12,Q13;.....Q51,Q52,Q53;R11,R12,R13;....R31,R32,R33)
+    #Q stacks on top of R --> np.vstack does this
+    B=block_diag(I,lam*R)
+
+    y=[]
+
+    for yi in call_prices:
+        y.append(yi)
+    for _ in range(n,2*n-2):
+        y.append(0)
+
+    y=np.array(y)
+
+    
+    x0=np.zeros(2*n - 2) #initial guess
+
+    def objectivefunction(x):
+        return -y.T @ x + (1/2)* x.T @ B @ x
+    
+    def constraint(x):
+        return A.T @ x
+    
+    result = minimize(
+        objectivefunction,
+        x0,
+        method="SLSQP",
+        constraints={"type": "eq", "fun": constraint}
+    )
+    x =result.x
+    g =x[:n] # x elements 1....n 
+    gamma = x[n:] # x elements n+1....end
+
     """
     Fit a cubic smoothing spline to call prices subject to no-arbitrage constraints.
 
-    Parameters
-    ----------
-    strikes : np.ndarray
-        1D sorted array of n strike prices
-    call_prices : np.ndarray
-        1D array of observed call option prices
-    lam : float
-        Smoothing parameter
-    S : float
-        Current spot price
-    r : float
-        Continuously compounded risk-free rate
-    T : float
-        Time to maturity in years
-    delta : float, optional
-        Continuous dividend yield, by default 0.0
 
     Returns
     -------
@@ -104,9 +124,39 @@ def fit_smoothing_spline(
     -----
     Fengler eqs 17-19 (QP formulation), eqs 25-27 (no-arbitrage constraints). Use scipy.optimize.minimize method='SLSQP'.
     """
-    raise NotImplementedError("Not yet implemented")
 
+    return {"g":g,"gamma":gamma,"x":x}
 
+"""
+call_prices = np.array([
+    5200.0, 4500.0, 3900.0, 3400.0,
+    3000.0, 2800.0, 2600.0, 2400.0,
+    2200.0, 1800.0, 1400.0, 900.0, 400.0
+])
+
+y = []
+n = len(call_prices)
+
+for yi in call_prices:
+    y.append(yi)
+
+for _ in range(n, 2*n - 2):
+    y.append(0)
+
+y = np.array(y)[:, None]
+
+y = np.array(y)
+print(y.T)
+print("2n-2 =", 2*n-2)                  
+print()
+print("len(y) =", len(y))   
+print("yshape",y.shape)
+print("y.T shape",(y.T).shape)
+I=np.identity(3)     
+R=np.array([[1,2,3],[4,5,6],[7,8,9]])
+B=block_diag(I,R)
+print(B)
+"""
 def evaluate_spline(result: dict, u: float) -> float:
     """
     Evaluate the fitted spline at a given strike u.
@@ -188,3 +238,6 @@ if __name__ == "__main__":
     print(f"Q[1,0]: {Q[1,0]:.6f}  — expected -0.000404")
     print(f"R[0,0]: {R[0,0]:.2f}  — expected  3303.94")
     print(f"R[0,1]: {R[0,1]:.2f}  — expected   825.98")
+    lam=1
+    smoothinsplineresults=fit_smoothing_spline(strikes, call_prices, lam)
+    print("smoothings spline results",smoothinsplineresults )
