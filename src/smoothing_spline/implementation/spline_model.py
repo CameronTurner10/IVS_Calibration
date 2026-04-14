@@ -240,4 +240,7 @@ if __name__ == "__main__":
     print(f"R[0,1]: {R[0,1]:.2f}  — expected   825.98")
     lam=1
     smoothinsplineresults=fit_smoothing_spline(strikes, call_prices, lam)
-    print("smoothings spline results",smoothinsplineresults )
+ 
+    print("g =",smoothinsplineresults["g"])
+    print("gamma =",smoothinsplineresults["gamma"])
+    print("x =",smoothinsplineresults["x"])
