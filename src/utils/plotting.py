@@ -348,6 +348,60 @@ def list_available_data(filepath="tests/data/Surfaces.xlsx"):
     return data
 
 
+def plot_spline_slice(
+    result: dict, T: float, market_strikes: np.ndarray, market_vols: np.ndarray, sheet_name: str = "", plot_type: str = "iv"
+) -> None:
+    """
+    Plot a single slice of a fitted smoothing spline against market data.
+
+    Parameters
+    ----------
+    result : dict
+        Dict returned by fit_smoothing_spline
+    T : float
+        Maturity in years
+    market_strikes : np.ndarray
+        Array of market strike prices
+    market_vols : np.ndarray
+        Array of market implied volatilities
+    sheet_name : str, optional
+        Sheet name for the plot title, by default ""
+    plot_type : str, optional
+        Either "iv" or "total_var", by default "iv"
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Mirror plot_single_slice() structure exactly. Replace SVI fit with evaluate_spline() + prices_to_iv().
+    """
+    raise NotImplementedError("Not yet implemented")
+
+
+def plot_spline_surface(spline_dict: dict, sheet_name: str = "") -> None:
+    """
+    Plot the full 3D smoothing spline implied volatility surface and a 2D heatmap.
+
+    Parameters
+    ----------
+    spline_dict : dict
+        Dict {T: result_dict} output of fit_all_splines
+    sheet_name : str, optional
+        Sheet name for the plot title, by default ""
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Mirror existing SVI surface plot structure. 3D surface and heatmap side by side.
+    """
+    raise NotImplementedError("Not yet implemented")
+
+
 if __name__ == "__main__":
     filepath = "tests/data/Surfaces.xlsx"
     data = list_available_data(filepath)

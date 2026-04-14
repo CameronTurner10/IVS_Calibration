@@ -1,10 +1,3 @@
-"""
-This will eventually:
-- load market data (strikes, maturities, implied volatilities
-- fit smoothing spline or SVI model to the data
-- run diagnostics on the fit like chbecking for arbitrage and smoothness
-- return calibrated IVS's
-"""
 
 from src.smoothing_spline.optimisation.fit_spline import fit_all_splines
 from src.svi.optimisation.fit_svi import fit_svi_surface
@@ -28,6 +21,32 @@ def calibrate_svi_surface(market_data):
     """
     svi_surface = fit_svi_surface(market_data)
     return svi_surface
+
+
+def compare_spline_vs_svi(market_data: dict, svi_fitted: dict, spline_fitted: dict) -> pd.DataFrame:
+    """
+    Compare the fit quality of smoothing spline vs SVI on the same surface.
+
+    Parameters
+    ----------
+    market_data : dict
+        Dict {T: (strikes, market_vols)}
+    svi_fitted : dict
+        Dict {T: svi_params_dict}
+    spline_fitted : dict
+        Dict {T: result_dict}
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns ['maturity', 'spline_rmse', 'svi_rmse', 'rmse_diff', 'spline_arb_free', 'winner']
+
+    Notes
+    -----
+    winner = 'spline' if spline_rmse < svi_rmse else 'svi'. spline_arb_free from check_arbitrage(result)['pass'].
+    """
+    raise NotImplementedError("Not yet implemented")
+
 
 def calibration_pipeline(market_data, method='spline', lam=0.1):
     """
