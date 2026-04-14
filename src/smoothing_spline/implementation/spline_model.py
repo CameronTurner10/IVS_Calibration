@@ -125,7 +125,8 @@ def fit_smoothing_spline(strikes: np.ndarray, call_prices: np.ndarray, lam: floa
     Fengler eqs 17-19 (QP formulation), eqs 25-27 (no-arbitrage constraints). Use scipy.optimize.minimize method='SLSQP'.
     """
 
-    return {"g":g,"gamma":gamma,"x":x}
+    check = Q.T@g- R@gamma
+    return {"g":g, "gamma":gamma, "x":x, "check":check}
 
 """
 call_prices = np.array([
@@ -244,3 +245,4 @@ if __name__ == "__main__":
     print("g =",smoothinsplineresults["g"])
     print("gamma =",smoothinsplineresults["gamma"])
     print("x =",smoothinsplineresults["x"])
+    print("Natural Spline Test =",smoothinsplineresults["check"])
