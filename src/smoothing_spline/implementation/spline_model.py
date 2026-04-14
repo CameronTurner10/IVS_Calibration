@@ -178,7 +178,51 @@ def evaluate_spline(result: dict, u: float) -> float:
     -----
     Fengler eq 20 (interior), eqs 21-24 (boundary derivatives and extrapolation).
     """
-    raise NotImplementedError("Not yet implemented")
+    # Pulling out the relevant data from the result dictionary
+    g = np.asarray(result["g"], dtype=float)
+    gamma = np.asarray(result["gamma"], dtype=float)
+    strikes = np.asarray(result["strikes"], dtype=float)
+    n = len(strikes)
+    h = np.diff(strikes)
+
+    # Reconstructing the full gamma vector from Fengler section 3.1 (γ_1 = γ_n = 0 by natural spline definition)
+    if len(gamma) == n - 2:
+        gamma_full = np.concatenate(([0.0], gamma, [0.0]))
+    elif len(gamma) == n:
+        gamma_full = gamma.copy()
+    else:
+        raise ValueError("gamma must have length n or n-2")
+
+    # Computing the boundary derivatives: Fengler's eqs 21-22
+    g_prime_left  = (g[1] - g[0]) / h[0] - (h[0] / 6) * gamma_full[1] # Slope of the leftmost knot
+    g_prime_right = (g[-1] - g[-2]) / h[-1] + (h[-1] / 6) * gamma_full[-2] # Slope of the rightmost knot
+
+    # Left extrapolation: Fengler eq 23
+    if u <= strikes[0]:
+        return max(float(g[0] + (u - strikes[0]) * g_prime_left), 0.0)
+
+    # Right extrapolation: Fengler eq 24 (mirror of left extrapolation, note the sign change in g_prime_right)
+    if u >= strikes[-1]:
+        return max(float(g[-1] + (u - strikes[-1]) * g_prime_right), 0.0)
+
+    # Interior evaluation: Fengler eq 20
+    i = np.searchsorted(strikes, u, side="right") - 1
+    i = int(np.clip(i, 0, n - 2))
+
+    hi = h[i]
+    gi,  gi1 = g[i],          g[i + 1]
+    yi,  yi1 = gamma_full[i], gamma_full[i + 1]
+
+    val = (
+        (u - strikes[i]) * gi1 + (strikes[i + 1] - u) * gi
+    ) / hi - ( # Linear interpolation of g between strikes[i] and strikes[i+1]
+        (1 / 6) * (u - strikes[i]) * (strikes[i + 1] - u) * (
+            (1 + (u - strikes[i]) / hi) * yi1 +
+            (1 + (strikes[i + 1] - u) / hi) * yi
+        ) # Cubic correction term based on the second derivatives at the knots
+    )
+
+    return max(float(val), 0.0) # Call price must be non-negative
 
 
 def second_derivative(result: dict, u: float) -> float:
