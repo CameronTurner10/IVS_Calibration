@@ -4,9 +4,7 @@ Contains:
 check_arbitrage: Function to check for arbitrage in the fitted spline
 check_smoothness: Function to check the smoothness of the spline"""
 
-
-def check_arbitrage(spline):
-   import numpy as np
+import numpy as np
 
 
 def check_arbitrage(result: dict) -> dict:
@@ -91,9 +89,7 @@ def check_arbitrage(result: dict) -> dict:
             "violations": ["gamma must have length n or n-2"],
         }
 
-    # ---------------------------
     # Eq. 25: gamma_i >= 0
-    # ---------------------------
     convexity_ok = np.all(gamma_full[1:-1] >= 0)
     if not convexity_ok:
         bad_idx = np.where(gamma_full[1:-1] < 0)[0] + 1
@@ -101,19 +97,17 @@ def check_arbitrage(result: dict) -> dict:
             f"Eq. 25 failed: negative gamma at interior indices {bad_idx.tolist()}"
         )
 
-    # ---------------------------
     # Eq. 26: boundary slope constraints
-    #   (g2 - g1)/(u2 - u1) >= -exp(-rT)
-    #   g_{n-1} - g_n >= 0
-    # ---------------------------
+    # (g2 - g1)/(u2 - u1) >= -exp(-rT)
+    # g_{n-1} - g_n >= 0
     monotonicity_ok = True
     disc_r = np.exp(-r * T)
 
     left_slope = (g[1] - g[0]) / (strikes[1] - strikes[0])
-    if left_slope < -disc_r:
+    if left_slope < -disc_r or left_slope > 0:
         monotonicity_ok = False
         violations.append(
-            f"Eq. 26 failed: left slope {left_slope:.6f} < {-disc_r:.6f}"
+            f"Eq. 26 failed: left slope {left_slope:.6f} out of bounds [{-disc_r:.6f}, 0.0]"
         )
 
     if g[-2] - g[-1] < 0:
@@ -122,11 +116,9 @@ def check_arbitrage(result: dict) -> dict:
             f"Eq. 26 failed: right endpoint difference g[n-1]-g[n] = {g[-2] - g[-1]:.6f} < 0"
         )
 
-    # ---------------------------
     # Eq. 27: price bounds
-    #   exp(-delta T)S - exp(-rT)u1 <= g1 <= exp(-delta T)S
-    #   g_n >= 0
-    # ---------------------------
+    # exp(-delta T)S - exp(-rT)u1 <= g1 <= exp(-delta T)S
+    # g_n >= 0
     price_bounds_ok = True
     disc_delta = np.exp(-delta * T)
 
@@ -152,10 +144,10 @@ def check_arbitrage(result: dict) -> dict:
         )
 
     return {
-        "pass": convexity_ok and monotonicity_ok and price_bounds_ok,
-        "convexity_ok": convexity_ok,
-        "monotonicity_ok": monotonicity_ok,
-        "price_bounds_ok": price_bounds_ok,
+        "pass": bool(convexity_ok and monotonicity_ok and price_bounds_ok),
+        "convexity_ok": bool(convexity_ok),
+        "monotonicity_ok": bool(monotonicity_ok),
+        "price_bounds_ok": bool(price_bounds_ok),
         "violations": violations,
     }
 
