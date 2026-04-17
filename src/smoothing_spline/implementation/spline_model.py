@@ -55,24 +55,20 @@ def build_R_matrix(strikes: np.ndarray) -> np.ndarray:
             R[i + 1, i] = h[i + 1] / 6
     return R
 
+def fit_smoothing_spline(strikes: np.ndarray, call_prices: np.ndarray, lam: float, S: float, r: float, T: float, delta: float = 0.0):
+    """
+    Fit a cubic smoothing spline to call prices subject to no-arbitrage constraints.
 
-"""#Numbers for testing
-strikes = np.array([24779.535, 29735.442, 34691.349, 39647.256,
-                    44603.163, 47081.117, 49559.070, 52037.024,
-                    54514.977, 59470.884, 64426.791, 69382.698, 74338.605])
 
-Q = build_Q_matrix(strikes)
-R = build_R_matrix(strikes)
+    Returns
+    -------
+    dict
+        Dictionary containing keys 'g', 'gamma', 'h', 'S', 'r', 'T', 'strikes'
 
-print(Q.shape) # (13, 11)
-print(R.shape) # (11, 11)
-print(Q[0, 0]) # ~  0.000202
-print(Q[1, 0]) # ~ -0.000404
-print(R[0, 0]) # ~ 3303.94
-print(R[0, 1]) # ~  825.98
-"""
-
-def fit_smoothing_spline(strikes: np.ndarray, call_prices: np.ndarray, lam: float):
+    Notes
+    -----
+    Fengler eqs 17-19 (QP formulation), eqs 25-27 (no-arbitrage constraints). Use scipy.optimize.minimize method='SLSQP' probably can exp tho
+    """
     R=build_R_matrix(strikes)
     Q=build_Q_matrix(strikes)
     A=np.vstack([Q,-R.T]) 
@@ -93,40 +89,70 @@ def fit_smoothing_spline(strikes: np.ndarray, call_prices: np.ndarray, lam: floa
     y=np.array(y)
 
     
-    x0=np.zeros(2*n - 2) #initial guess
+    x0=np.zeros(2*n - 2) #defining shape of x
+    x0[:n] = y[:n] # better initial guess for g
 
     def objectivefunction(x):
         return -y.T @ x + (1/2)* x.T @ B @ x
     
-    def constraint(x):
+    def eq_constraint(x):
         return A.T @ x
-    
+
+    disc_r = np.exp(-r * T)
+    disc_delta = np.exp(-delta * T)
+
+    def ineq_constraint(x):
+        # Fengler Eq. 26: slope constraints for no-arbitrage
+        # left_slope >= -exp(-rT) -> g_1 - g_0 + exp(-rT)*(u_1 - u_0) >= 0
+        # right_end -> g_{n-1} - g_n >= 0
+        g_current = x[:n]
+        c1 = g_current[1] - g_current[0] + disc_r * (strikes[1] - strikes[0])
+        c2 = g_current[-2] - g_current[-1]
+        return np.array([c1, c2])
+
+    bounds = []
+    # Fengler Eq. 27: Price bounds bounds
+    lower_g1 = disc_delta * S - disc_r * strikes[0]
+    upper_g1 = disc_delta * S
+    bounds.append((lower_g1, upper_g1)) # bounds on g_1
+
+    for _ in range(1, n - 1):
+        bounds.append((0.0, None)) # bounds on interior g_i
+
+    bounds.append((0.0, None)) # bounds on g_n (Eq. 27)
+
+    # Fengler Eq. 25: Convexity constraint (gamma_i >= 0)
+    for _ in range(n - 2):
+        bounds.append((0.0, None)) 
+
     result = minimize(
         objectivefunction,
         x0,
         method="SLSQP",
-        constraints={"type": "eq", "fun": constraint}
+        bounds=bounds,
+        constraints=[
+            {"type": "eq", "fun": eq_constraint},
+            {"type": "ineq", "fun": ineq_constraint}
+        ]
     )
-    x =result.x
-    g =x[:n] # x elements 1....n 
+    x = result.x
+    g = x[:n] # x elements 1....n 
     gamma = x[n:] # x elements n+1....end
 
-    """
-    Fit a cubic smoothing spline to call prices subject to no-arbitrage constraints.
+    
 
-
-    Returns
-    -------
-    dict
-        Dictionary containing keys 'g', 'gamma', 'h', 'S', 'r', 'T', 'strikes'
-
-    Notes
-    -----
-    Fengler eqs 17-19 (QP formulation), eqs 25-27 (no-arbitrage constraints). Use scipy.optimize.minimize method='SLSQP'.
-    """
-
-    check = Q.T@g- R@gamma
-    return {"g":g, "gamma":gamma, "x":x, "check":check}
+    check = Q.T @ g - R @ gamma
+    return {
+        "g": g, 
+        "gamma": gamma, 
+        "strikes": strikes, 
+        "x": x, 
+        "check": check,
+        "S": S,
+        "r": r,
+        "T": T,
+        "delta": delta
+    }
 
 """
 call_prices = np.array([
@@ -210,8 +236,8 @@ def evaluate_spline(result: dict, u: float) -> float:
     i = int(np.clip(i, 0, n - 2))
 
     hi = h[i]
-    gi,  gi1 = g[i],          g[i + 1]
-    yi,  yi1 = gamma_full[i], gamma_full[i + 1]
+    gi, gi1 = g[i], g[i + 1]
+    yi, yi1 = gamma_full[i], gamma_full[i + 1]
 
     val = (
         (u - strikes[i]) * gi1 + (strikes[i + 1] - u) * gi
@@ -245,7 +271,35 @@ def second_derivative(result: dict, u: float) -> float:
     -----
     Fengler Proposition 3.1. g'' is linear between knots. Used to verify convexity.
     """
-    raise NotImplementedError("Not yet implemented")
+    strikes = np.asarray(result["strikes"], dtype=float)
+    gamma_internal = np.asarray(result["gamma"], dtype=float)
+    n = len(strikes)
+
+    # reconstruct full gamma vector (length n)
+    # gamma_1 = gamma_n = 0 for a natural smoothing spline
+    if len(gamma_internal) == n - 2:
+        gamma = np.concatenate(([0.0], gamma_internal, [0.0]))
+    elif len(gamma_internal) == n:
+        gamma = gamma_internal
+    else:
+        raise ValueError(f"gamma must have length n or n-2, got {len(gamma_internal)}")
+
+    # outside the domain, second derivative is zero (natural spline extrapolation is linear)
+    if u < strikes[0] or u > strikes[-1]:
+        return 0.0
+
+    # find the interval [strikes[i], strikes[i+1]] containing u
+    i = np.searchsorted(strikes, u, side="right") - 1
+    i = int(np.clip(i, 0, n - 2))
+
+    # formula for second derivative g''(u) which is linear between knots
+    h_i = strikes[i + 1] - strikes[i]
+    if h_i == 0:
+        return float(gamma[i])
+        
+    g_2 = ((strikes[i + 1] - u) / h_i * gamma[i] + (u - strikes[i]) / h_i * gamma[i + 1])
+
+    return float(g_2)
 
 
 def prices_to_iv(result: dict, strikes_grid: np.ndarray, F: float) -> np.ndarray:
@@ -284,7 +338,8 @@ if __name__ == "__main__":
     print(f"R[0,0]: {R[0,0]:.2f}  — expected  3303.94")
     print(f"R[0,1]: {R[0,1]:.2f}  — expected   825.98")
     lam=1
-    smoothinsplineresults=fit_smoothing_spline(strikes, call_prices, lam)
+    # T=0.043836 based on the load_spline_slice call above
+    smoothinsplineresults=fit_smoothing_spline(strikes, call_prices, lam, S, r, 0.043836)
  
     print("g =",smoothinsplineresults["g"])
     print("gamma =",smoothinsplineresults["gamma"])
