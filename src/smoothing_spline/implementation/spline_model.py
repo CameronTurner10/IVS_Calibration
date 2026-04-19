@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 from scipy.linalg import block_diag
+from src.utils.root_finder import implied_vol
 
 # poetry run python -m src.smoothing_spline.implementation.spline_model
 
@@ -322,9 +323,21 @@ def prices_to_iv(result: dict, strikes_grid: np.ndarray, F: float) -> np.ndarray
 
     Notes
     -----
-    Evaluates spline on grid then inverts Black-Scholes using existing solver in src/utils/black_scholes.py
+    Evaluates spline on grid then inverts Black-Scholes using existing solver in src/utils/root_finder.py
     """
-    raise NotImplementedError("Not yet implemented")
+    
+
+    r = result["r"]
+    T = result["T"]
+    
+    ivs = np.zeros_like(strikes_grid, dtype=float)
+    
+    for i, K in enumerate(strikes_grid):
+        price = evaluate_spline(result, float(K))
+        iv = implied_vol(F, float(K), T, r, price, option_type="call")
+        ivs[i] = iv
+        
+    return ivs
 
 
 if __name__ == "__main__":
