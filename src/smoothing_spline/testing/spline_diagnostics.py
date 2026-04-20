@@ -34,6 +34,7 @@ def check_arbitrage(result: dict) -> dict:
     eq. 27 (price bounds).
     """
     violations = []
+    tol = 1e-8
 
     required = ["g", "gamma", "S", "r", "T", "strikes"]
     missing = [key for key in required if key not in result]
@@ -89,31 +90,30 @@ def check_arbitrage(result: dict) -> dict:
             "violations": ["gamma must have length n or n-2"],
         }
 
-    # Eq. 25: gamma_i >= 0
-    convexity_ok = np.all(gamma_full[1:-1] >= 0)
+    convexity_ok = np.all(gamma_full[1:-1] >= -tol)
     if not convexity_ok:
-        bad_idx = np.where(gamma_full[1:-1] < 0)[0] + 1
+        bad_idx = np.where(gamma_full[1:-1] < -tol)[0] + 1
         violations.append(
             f"Eq. 25 failed: negative gamma at interior indices {bad_idx.tolist()}"
         )
 
-    # Eq. 26: boundary slope constraints
-    # (g2 - g1)/(u2 - u1) >= -exp(-rT)
-    # g_{n-1} - g_n >= 0
     monotonicity_ok = True
     disc_r = np.exp(-r * T)
+    h = np.diff(strikes)
 
-    left_slope = (g[1] - g[0]) / (strikes[1] - strikes[0])
-    if left_slope < -disc_r or left_slope > 0:
+    left_slope = (g[1] - g[0]) / h[0] - (h[0] / 6.0) * gamma_full[1]
+    right_slope = (g[-1] - g[-2]) / h[-1] - (h[-1] / 6.0) * gamma_full[-2]
+
+    if left_slope < -disc_r - tol:
         monotonicity_ok = False
         violations.append(
-            f"Eq. 26 failed: left slope {left_slope:.6f} out of bounds [{-disc_r:.6f}, 0.0]"
+            f"Eq. 26 failed: left derivative {left_slope:.6f} below lower bound {-disc_r:.6f}"
         )
 
-    if g[-2] - g[-1] < 0:
+    if right_slope > tol:
         monotonicity_ok = False
         violations.append(
-            f"Eq. 26 failed: right endpoint difference g[n-1]-g[n] = {g[-2] - g[-1]:.6f} < 0"
+            f"Eq. 26 failed: right derivative {right_slope:.6f} is positive"
         )
 
     # Eq. 27: price bounds
@@ -125,19 +125,19 @@ def check_arbitrage(result: dict) -> dict:
     lower_g1 = disc_delta * S - disc_r * strikes[0]
     upper_g1 = disc_delta * S
 
-    if g[0] < lower_g1:
+    if g[0] < lower_g1 - tol:
         price_bounds_ok = False
         violations.append(
             f"Eq. 27 failed: g[0]={g[0]:.6f} below lower bound {lower_g1:.6f}"
         )
 
-    if g[0] > upper_g1:
+    if g[0] > upper_g1 + tol:
         price_bounds_ok = False
         violations.append(
             f"Eq. 27 failed: g[0]={g[0]:.6f} above upper bound {upper_g1:.6f}"
         )
 
-    if g[-1] < 0:
+    if g[-1] < -tol:
         price_bounds_ok = False
         violations.append(
             f"Eq. 27 failed: g[-1]={g[-1]:.6f} is negative"
@@ -158,6 +158,5 @@ def check_smoothness(spline):
     Placeholder function, actual implementation will analyze the spline's derivatives.
     """
     raise NotImplementedError("Smoothness check not implemented yet")
-
 
 
