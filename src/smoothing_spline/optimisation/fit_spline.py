@@ -20,11 +20,14 @@ def choose_lambda(
     delta: float = 0.0,
     lam_grid: np.ndarray = None,
     plot_aic: bool = False,
+    #Brandon 20/04/2026: can be gcv or aic, fengler did aic but gcv is another i fount works well
+    criterion: str = "aic",
+    #criterion: str = "gcv",
     fit_mode: str = "weighted",
     min_price: float = 1e-4,
 ) -> float:
     """
-    Select the optimal smoothing parameter lambda by minimizing GCV.
+    Select the optimal smoothing parameter lambda.
 
     Parameters
     ----------
@@ -43,7 +46,9 @@ def choose_lambda(
     lam_grid : np.ndarray, optional
         Grid of lambda values to search over, by default np.logspace(-2,6,50)
     plot_aic : bool, optional
-        If True plot the AIC curve, by default False
+        If True plot the selected score curve, by default False
+    criterion : str, optional
+        Score used to choose lambda. Either "gcv" or "aic", by default "gcv"
 
     Returns
     -------
@@ -51,6 +56,9 @@ def choose_lambda(
         Optimal lambda value
 
     """
+    # Brandon 20/04/2026: can be gcv or aic, fengler did aic but gcv is another i found works well
+    assert criterion in {"gcv", "aic"}, "Criterion must be 'gcv' or 'aic'"
+
     if lam_grid is None:
         lam_grid = np.logspace(-2, 10, 80)
 
@@ -61,7 +69,7 @@ def choose_lambda(
     rhs = observation_matrix @ call_prices
     n = len(strikes)
 
-    gcv_scores = []
+    scores = []
     for lam in lam_grid:
         # Once the fitter switches from I to W, the lambda search has to use
         # the same observation matrix or the two steps optimise different models.
@@ -71,27 +79,32 @@ def choose_lambda(
         residual = g_hat - call_prices
         rss = float(residual.T @ observation_matrix @ residual)
 
-        # Degrees of Freedom (trace of hat matrix)
+        # Degrees of freedom are the trace of the hat matrix here.
         H_lam = np.linalg.solve(A, observation_matrix)
-        df = np.trace(H_lam)
+        degrees_of_freedom = np.trace(H_lam)
 
-        # GCV Score Eq 30
-        denom = (n - df) ** 2
-        if denom < 1e-12:
-            gcv_scores.append(np.inf)
+        if criterion == "gcv":
+            denom = (n - degrees_of_freedom) ** 2
+            if denom < 1e-12:
+                scores.append(np.inf)
+            else:
+                scores.append((n * rss) / denom)
         else:
-            gcv_scores.append((n * rss) / denom)
+            # Standard AIC: n*log(RSS/n) + 2*df
+            scale = max(rss / n, 1e-12)
+            scores.append(n * np.log(scale) + 2 * degrees_of_freedom)
 
-    best_idx = np.argmin(gcv_scores)
+    best_idx = np.argmin(scores)
     best_lam = lam_grid[best_idx]
 
     if plot_aic:
         plt.figure(figsize=(8, 5))
-        plt.plot(lam_grid, gcv_scores, 'b.-', markersize=4, linewidth=0.5, label="GCV Score")
-        plt.axvline(best_lam, color='red', linestyle='--', label=f"Best lambda = {best_lam:.2f}")
-        plt.title(f"Choosing Lambda ({fit_mode})")
+        lbl = criterion.upper()
+        plt.plot(lam_grid, scores, 'b.-', markersize=4, linewidth=0.5, label=f"{lbl} Score")
+        plt.axvline(best_lam, color='red', linestyle='--', label=f"Best lambda = {best_lam:.2e}")
+        plt.title(f"Lambda Search ({fit_mode}, {lbl})")
         plt.xlabel("Lambda")
-        plt.ylabel("GCV Score")
+        plt.ylabel(f"{lbl} Score")
         plt.xscale("log")
         plt.legend()
         plt.grid(True, alpha=0.3)
