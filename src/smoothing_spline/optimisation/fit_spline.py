@@ -1,14 +1,14 @@
-"""
-Spline fitting automatic λ selection and batch maturity processing.
-
-Fengler, M.R. (2009). Arbitrage-Free Smoothing of the Implied Volatility Surface. Quantitative Finance, 9(4), 417-428.
-"""
 
 # poetry run python -m src.smoothing_spline.optimisation.fit_spline
 
 import numpy as np
 import matplotlib.pyplot as plt
-from src.smoothing_spline.implementation.spline_model import build_Q_matrix, build_R_matrix, load_spline_slice
+from src.smoothing_spline.implementation.spline_model import (
+    build_observation_matrix,
+    build_Q_matrix,
+    build_R_matrix,
+    load_spline_slice,
+)
 
 
 def choose_lambda(
@@ -20,9 +20,11 @@ def choose_lambda(
     delta: float = 0.0,
     lam_grid: np.ndarray = None,
     plot_aic: bool = False,
+    fit_mode: str = "weighted",
+    min_price: float = 1e-4,
 ) -> float:
     """
-    Select the optimal smoothing parameter lambda by minimizing GCV / AIC.
+    Select the optimal smoothing parameter lambda by minimizing GCV.
 
     Parameters
     ----------
@@ -48,50 +50,49 @@ def choose_lambda(
     float
         Optimal lambda value
 
-    Notes
-    -----
-    Fengler Section 3.4. AIC = n*log(RSS/n) + 2*df. Reproduces Fengler Figure 3 if plot_aic=True.
     """
-    
-    
     if lam_grid is None:
-        lam_grid = np.linspace(0, 1000000, 50)
+        lam_grid = np.logspace(-2, 10, 80)
 
-    # Pre-calculate matrices
     Q = build_Q_matrix(strikes)
     R = build_R_matrix(strikes)
     K = Q @ np.linalg.solve(R, Q.T)
+    observation_matrix = build_observation_matrix(call_prices, fit_mode, min_price)
+    rhs = observation_matrix @ call_prices
     n = len(strikes)
 
-    aic_scores = []
-    #cant call lambda a variable bc its a python keyword, same as cant call a variable 'def'
+    gcv_scores = []
     for lam in lam_grid:
-        # FENGLER EQ 31: H = (I + lambda * Q * R^-1 * Q^T)^-1
-        A = np.eye(n) + lam * K
-        g_hat = np.linalg.solve(A, call_prices)
-        
-        # Error (RSS)
-        rss = np.sum((g_hat - call_prices)**2)
-        
-        # Complexity (Degrees of Freedom)
-        H_lam = np.linalg.inv(A)
-        degrees_of_freedom = np.trace(H_lam)
-        
-        # FENGLER EQ 30: Xi(lambda) = RSS + 2 * Trace(H)   could mayvbe use gcv instead?
-        aic = rss + 2 * degrees_of_freedom
-        aic_scores.append(aic)
-        
-    # Find the lambda that gave the lowest AIC score
-    best_idx = np.argmin(aic_scores)
+        # Once the fitter switches from I to W, the lambda search has to use
+        # the same observation matrix or the two steps optimise different models.
+        A = observation_matrix + lam * K
+        g_hat = np.linalg.solve(A, rhs)
+
+        residual = g_hat - call_prices
+        rss = float(residual.T @ observation_matrix @ residual)
+
+        # Degrees of Freedom (trace of hat matrix)
+        H_lam = np.linalg.solve(A, observation_matrix)
+        df = np.trace(H_lam)
+
+        # GCV Score Eq 30
+        denom = (n - df) ** 2
+        if denom < 1e-12:
+            gcv_scores.append(np.inf)
+        else:
+            gcv_scores.append((n * rss) / denom)
+
+    best_idx = np.argmin(gcv_scores)
     best_lam = lam_grid[best_idx]
-    
+
     if plot_aic:
         plt.figure(figsize=(8, 5))
-        plt.plot(lam_grid, aic_scores, 'b.-', markersize=4, linewidth=0.5, label="AIC Score")
+        plt.plot(lam_grid, gcv_scores, 'b.-', markersize=4, linewidth=0.5, label="GCV Score")
         plt.axvline(best_lam, color='red', linestyle='--', label=f"Best lambda = {best_lam:.2f}")
-        plt.title("Choosing Lambda Eq 30")
+        plt.title(f"Choosing Lambda ({fit_mode})")
         plt.xlabel("Lambda")
-        plt.ylabel("AIC Score Xi(lambda)")
+        plt.ylabel("GCV Score")
+        plt.xscale("log")
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.show()

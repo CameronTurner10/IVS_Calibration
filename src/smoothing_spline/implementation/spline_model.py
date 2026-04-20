@@ -7,6 +7,7 @@ from src.utils.root_finder import implied_vol
 # poetry run python -m src.smoothing_spline.implementation.spline_model
 
 FILEPATH = "tests/data/Surfaces.xlsx"
+ALLOWED_FIT_MODES = {"unweighted", "weighted"}
 
 
 def load_spline_slice(sheet_name, T, filepath=FILEPATH):
@@ -56,60 +57,86 @@ def build_R_matrix(strikes: np.ndarray) -> np.ndarray:
             R[i + 1, i] = h[i + 1] / 6
     return R
 
-def fit_smoothing_spline(strikes: np.ndarray, call_prices: np.ndarray, lam: float, S: float, r: float, T: float, delta: float = 0.0):
+
+def build_observation_matrix(
+    call_prices: np.ndarray,
+    fit_mode: str = "weighted",
+    min_price: float = 1e-4,
+) -> np.ndarray:
     """
-    Fit a cubic smoothing spline to call prices subject to no-arbitrage constraints.
-
-
-    Returns
-    -------
-    dict
-        Dictionary containing keys 'g', 'gamma', 'h', 'S', 'r', 'T', 'strikes'
-
-    Notes
-    -----
-    Fengler eqs 17-19 (QP formulation), eqs 25-27 (no-arbitrage constraints). Use scipy.optimize.minimize method='SLSQP' probably can exp tho
+    Builds $W$ (observation weights). 
+    2005 = Identity. 2009 = Diagonal inverse prices (weighted).
     """
-    R=build_R_matrix(strikes)
-    Q=build_Q_matrix(strikes)
-    A=np.vstack([Q,-R.T]) 
+    if fit_mode not in ALLOWED_FIT_MODES:
+        raise ValueError(
+            f"Invalid fit_mode '{fit_mode}'. Expected one of {sorted(ALLOWED_FIT_MODES)}"
+        )
+
     n = len(call_prices)
-    I=np.identity(n)
-    #say you have (Q;R) this would be 
-    # (Q;R)=(Q11,Q12,Q13;.....Q51,Q52,Q53;R11,R12,R13;....R31,R32,R33)
-    #Q stacks on top of R --> np.vstack does this
-    B=block_diag(I,lam*R)
+    if fit_mode == "unweighted":
+        return np.identity(n)
 
-    y=[]
+    price_floor = np.maximum(call_prices, min_price)
+    return np.diag(1.0 / price_floor)
 
-    for yi in call_prices:
-        y.append(yi)
-    for _ in range(n,2*n-2):
-        y.append(0)
 
-    y=np.array(y)
+def fit_smoothing_spline(
+    strikes: np.ndarray,
+    call_prices: np.ndarray,
+    lam: float,
+    S: float,
+    r: float,
+    T: float,
+    delta: float = 0.0,
+    fit_mode: str = "weighted",
+    min_price: float = 1e-4,
+):
+    """
+    Fit cubic smoothing spline to call prices with no-arbitrage constraints.
+    Returns dict with 'g', 'gamma', and solver metadata.
+    """
+    R = build_R_matrix(strikes)
+    Q = build_Q_matrix(strikes)
+    A = np.vstack([Q, -R.T])
+    n = len(call_prices)
+    observation_matrix = build_observation_matrix(
+        call_prices,
+        fit_mode=fit_mode,
+        min_price=min_price,
+    )
+    # 2005 uses I here; 2009 replaces it with W and the linear term has to
+    # move with it or the weighted fit solves the wrong problem.
+    B = block_diag(observation_matrix, lam * R)
+    weighted_prices = observation_matrix @ call_prices
+    y = np.concatenate([weighted_prices, np.zeros(n - 2)])
 
-    
-    x0=np.zeros(2*n - 2) #defining shape of x
-    x0[:n] = y[:n] # better initial guess for g
+    x0 = np.zeros(2 * n - 2)
+    x0[:n] = call_prices
 
     def objectivefunction(x):
-        return -y.T @ x + (1/2)* x.T @ B @ x
-    
+        return -y.T @ x + 0.5 * x.T @ B @ x
+
     def eq_constraint(x):
         return A.T @ x
 
     disc_r = np.exp(-r * T)
     disc_delta = np.exp(-delta * T)
+    h = np.diff(strikes)
 
     def ineq_constraint(x):
-        # Fengler Eq. 26: slope constraints for no-arbitrage
-        # left_slope >= -exp(-rT) -> g_1 - g_0 + exp(-rT)*(u_1 - u_0) >= 0
-        # right_end -> g_{n-1} - g_n >= 0
         g_current = x[:n]
-        c1 = g_current[1] - g_current[0] + disc_r * (strikes[1] - strikes[0])
-        c2 = g_current[-2] - g_current[-1]
-        return np.array([c1, c2])
+        gamma_current = x[n:]
+
+        left_slope = (g_current[1] - g_current[0]) / h[0]
+        right_slope = (g_current[-1] - g_current[-2]) / h[-1]
+        if len(gamma_current) > 0:
+            left_slope -= (h[0] / 6.0) * gamma_current[0]
+            right_slope -= (h[-1] / 6.0) * gamma_current[-1]
+
+        return np.array([
+            left_slope + disc_r,
+            -right_slope,
+        ])
 
     bounds = []
     # Fengler Eq. 27: Price bounds bounds
@@ -137,22 +164,28 @@ def fit_smoothing_spline(strikes: np.ndarray, call_prices: np.ndarray, lam: floa
         ]
     )
     x = result.x
-    g = x[:n] # x elements 1....n 
-    gamma = x[n:] # x elements n+1....end
+    g = x[:n]
+    gamma = x[n:]
 
     
 
     check = Q.T @ g - R @ gamma
     return {
-        "g": g, 
-        "gamma": gamma, 
-        "strikes": strikes, 
-        "x": x, 
+        "g": g,
+        "gamma": gamma,
+        "strikes": strikes,
+        "x": x,
         "check": check,
         "S": S,
         "r": r,
         "T": T,
-        "delta": delta
+        "delta": delta,
+        "fit_mode": fit_mode,
+        "min_price": float(min_price),
+        "weights": np.diag(observation_matrix).copy(),
+        "success": bool(result.success),
+        "status": int(result.status),
+        "message": result.message,
     }
 
 """
@@ -220,9 +253,9 @@ def evaluate_spline(result: dict, u: float) -> float:
     else:
         raise ValueError("gamma must have length n or n-2")
 
-    # Computing the boundary derivatives: Fengler's eqs 21-22
     g_prime_left  = (g[1] - g[0]) / h[0] - (h[0] / 6) * gamma_full[1] # Slope of the leftmost knot
-    g_prime_right = (g[-1] - g[-2]) / h[-1] + (h[-1] / 6) * gamma_full[-2] # Slope of the rightmost knot
+    g_prime_right = (g[-1] - g[-2]) / h[-1] - (h[-1] / 6) * gamma_full[-2] # Slope of the rightmost knot
+    #Brandon 20/04/2026: changed sign in g_prime_right to match fengler
 
     # Left extrapolation: Fengler eq 23
     if u <= strikes[0]:
