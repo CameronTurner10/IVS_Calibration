@@ -348,9 +348,7 @@ def list_available_data(filepath="tests/data/Surfaces.xlsx"):
     return data
 
 
-def plot_spline_slice(
-    result: dict, T: float, market_strikes: np.ndarray, market_vols: np.ndarray, sheet_name: str = "", plot_type: str = "iv"
-) -> None:
+def plot_spline_slice(result: dict, T: float, market_strikes: np.ndarray, market_vols: np.ndarray, sheet_name: str = "", plot_type: str = "iv") -> None:
     """
     Plot a single slice of a fitted smoothing spline against market data.
 
@@ -377,7 +375,59 @@ def plot_spline_slice(
     -----
     Mirror plot_single_slice() structure exactly. Replace SVI fit with evaluate_spline() + prices_to_iv().
     """
-    raise NotImplementedError("Not yet implemented")
+    from src.smoothing_spline.implementation.spline_model import prices_to_iv
+
+    forward = result["forward"]
+    k_values = np.log(market_strikes / forward)
+
+    if plot_type == "iv":
+        market_y = market_vols
+    else:  
+        market_y = market_vols ** 2 * T
+
+    k_grid = np.linspace(min(k_values), max(k_values), 200)
+    K_grid = forward * np.exp(k_grid)    
+    iv_grid = prices_to_iv(result, K_grid, forward)
+    iv_at_k = prices_to_iv(result, market_strikes, forward)
+
+    if plot_type == "iv":
+        fitted_y_grid = iv_grid
+        fitted_y_at_k = iv_at_k
+        y_label = "Implied Volatility"
+    else:
+        fitted_y_grid = iv_grid ** 2 * T
+        fitted_y_at_k = iv_at_k ** 2 * T
+        y_label = "Total Implied Variance"
+    
+    residuals = fitted_y_at_k - market_y
+
+    # copied from plot_single_slice
+    fig, (ax_main, ax_res) = plt.subplots(
+        2, 1, figsize=(10, 7),
+        gridspec_kw={"height_ratios": [3, 1]},
+        sharex=True
+    )
+    fig.suptitle(f"Smoothing Spline for T = {T:.6f}y", fontsize=14, fontweight="bold")
+    
+    ax_main.scatter(k_values, market_y, color="black", s=30, zorder=3, label="Market Data")
+    ax_main.plot(k_grid, fitted_y_grid, color="red", linewidth=2, label="Smoothing Spline Fit")
+    ax_main.set_ylabel(y_label)
+    ax_main.legend(loc="upper right")
+    ax_main.grid(True, alpha=0.3)
+
+    ax_res.bar(k_values, residuals, width=0.01, color="steelblue", alpha=0.7)
+    ax_res.axhline(y=0, color="black", linewidth=0.8)
+    ax_res.set_xlabel("Log-moneyness (k)")
+    ax_res.set_ylabel("Residual")
+    ax_res.grid(True, alpha=0.3)
+    
+    rmse = np.sqrt(np.mean(residuals ** 2))
+    ax_res.text(0.98, 0.90, f"RMSE = {rmse:.2e}", transform=ax_res.transAxes, fontsize=9, ha="right", va="top")
+    
+    plt.tight_layout()
+    plt.show()
+    
+  
 
 
 def plot_spline_surface(spline_dict: dict, sheet_name: str = "") -> None:
