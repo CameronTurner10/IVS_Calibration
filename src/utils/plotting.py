@@ -348,14 +348,9 @@ def list_available_data(filepath="tests/data/Surfaces.xlsx"):
     return data
 
 
-def plot_spline_slice(
-        result: dict, 
-        T: float, 
-        market_strikes: np.ndarray, 
-        market_vols: np.ndarray, 
-        forward: float,                         # added line to pass forward price
-        sheet_name: str = "", 
-        plot_type: str = "total_var") -> None:  
+def plot_spline_slice(result, T, market_strikes, market_vols, forward=None, sheet_name="", plot_type="iv"):
+    if forward is None:
+        forward = result["forward"]
     """
     Plot a single slice of a fitted smoothing spline against market data.
 
