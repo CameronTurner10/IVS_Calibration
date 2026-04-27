@@ -348,7 +348,14 @@ def list_available_data(filepath="tests/data/Surfaces.xlsx"):
     return data
 
 
-def plot_spline_slice(result: dict, T: float, market_strikes: np.ndarray, market_vols: np.ndarray, sheet_name: str = "", plot_type: str = "iv") -> None:
+def plot_spline_slice(
+        result: dict, 
+        T: float, 
+        market_strikes: np.ndarray, 
+        market_vols: np.ndarray, 
+        forward: float,                         # added line to pass forward price
+        sheet_name: str = "", 
+        plot_type: str = "total_var") -> None:  
     """
     Plot a single slice of a fitted smoothing spline against market data.
 
@@ -377,8 +384,8 @@ def plot_spline_slice(result: dict, T: float, market_strikes: np.ndarray, market
     """
     from src.smoothing_spline.implementation.spline_model import prices_to_iv
 
-    forward = result["forward"]
-    k_values = np.log(market_strikes / forward)
+    # forward is now passed in; keep local name for clarity
+    k_values = np.log(market_strikes / forward)     # UNCHANGED, but 'forward' now comes from the arg
 
     if plot_type == "iv":
         market_y = market_vols
@@ -421,7 +428,8 @@ def plot_spline_slice(result: dict, T: float, market_strikes: np.ndarray, market
     ax_res.set_ylabel("Residual")
     ax_res.grid(True, alpha=0.3)
     
-    rmse = np.sqrt(np.mean(residuals ** 2))
+    valid = np.isfinite(residuals)
+    rmse = np.sqrt(np.mean(residuals[valid] ** 2)) if valid.any() else float("nan")
     ax_res.text(0.98, 0.90, f"RMSE = {rmse:.2e}", transform=ax_res.transAxes, fontsize=9, ha="right", va="top")
     
     plt.tight_layout()
