@@ -64,7 +64,7 @@ def test_build_observation_matrix_unweighted():
 def test_build_observation_matrix_weighted_with_floor():
     prices = np.array([100.0, 0.25, 2.0])
     W = build_observation_matrix(prices, fit_mode="weighted", min_price=1.0)
-    expected = np.diag([0.01, 1.0, 0.5])
+    expected = np.diag([0.0001, 1.0, 0.25])
     np.testing.assert_allclose(W, expected, atol=1e-12)
 
 

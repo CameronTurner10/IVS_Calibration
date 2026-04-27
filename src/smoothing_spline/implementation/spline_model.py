@@ -64,8 +64,9 @@ def build_observation_matrix(
     min_price: float = 1e-4,
 ) -> np.ndarray:
     """
-    Builds $W$ (observation weights). 
-    2005 = Identity. 2009 = Diagonal inverse prices (weighted).
+    Builds W (observation weights).
+    2005 = Identity. Weighted mode uses inverse squared floored prices,
+    corresponding to relative squared price errors.
     """
     if fit_mode not in ALLOWED_FIT_MODES:
         raise ValueError(
@@ -76,8 +77,8 @@ def build_observation_matrix(
     if fit_mode == "unweighted":
         return np.identity(n)
 
-    price_floor = np.maximum(call_prices, min_price)
-    return np.diag(1.0 / price_floor)
+    floored_call_prices = np.maximum(call_prices, min_price)
+    return np.diag(1.0 / floored_call_prices**2)
 
 
 def fit_smoothing_spline(
