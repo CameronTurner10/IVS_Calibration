@@ -106,7 +106,8 @@ def check_arbitrage(result: dict) -> dict:
     h = np.diff(strikes)
 
     left_slope = (g[1] - g[0]) / h[0] - (h[0] / 6.0) * gamma_full[1]
-    right_slope = (g[-1] - g[-2]) / h[-1] - (h[-1] / 6.0) * gamma_full[-2]
+    right_slope = (g[-1] - g[-2]) / h[-1] + (h[-1] / 6.0) * gamma_full[-2]
+    # Brandon 27/04 : fixed sign error for right slope
 
     if left_slope < -disc_r - tol:
         monotonicity_ok = False
@@ -174,6 +175,4 @@ def check_smoothness(spline):
         return False
 
     raise NotImplementedError("Smoothness check not implemented yet")
-
-
 

@@ -132,7 +132,8 @@ def fit_smoothing_spline(
         right_slope = (g_current[-1] - g_current[-2]) / h[-1]
         if len(gamma_current) > 0:
             left_slope -= (h[0] / 6.0) * gamma_current[0]
-            right_slope -= (h[-1] / 6.0) * gamma_current[-1]
+            right_slope += (h[-1] / 6.0) * gamma_current[-1]
+            # Brandon 27/04 : Fixed sign error for right slope
 
         return np.array([
             left_slope + disc_r,
@@ -255,8 +256,8 @@ def evaluate_spline(result: dict, u: float) -> float:
         raise ValueError("gamma must have length n or n-2")
 
     g_prime_left  = (g[1] - g[0]) / h[0] - (h[0] / 6) * gamma_full[1] # Slope of the leftmost knot
-    g_prime_right = (g[-1] - g[-2]) / h[-1] - (h[-1] / 6) * gamma_full[-2] # Slope of the rightmost knot
-    #Brandon 20/04/2026: changed sign in g_prime_right to match fengler
+    g_prime_right = (g[-1] - g[-2]) / h[-1] + (h[-1] / 6) * gamma_full[-2] # Slope of the rightmost knot
+    #brandon 27/04 : Fixed sign error for right slope
 
     # Left extrapolation: Fengler eq 23
     if u <= strikes[0]:
