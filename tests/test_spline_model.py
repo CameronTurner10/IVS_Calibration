@@ -7,6 +7,7 @@ from src.smoothing_spline.implementation.spline_model import (
     build_R_matrix,
     evaluate_spline,
 )
+from src.smoothing_spline.testing.spline_diagnostics import check_arbitrage
 
 # ./.venv/bin/pytest
 
@@ -68,11 +69,27 @@ def test_build_observation_matrix_weighted_with_floor():
     np.testing.assert_allclose(W, expected, atol=1e-12)
 
 
-def test_evaluate_spline_right_extrapolation_uses_negative_curvature_term():
+def test_evaluate_spline_right_extrapolation_uses_positive_curvature_term():
     result = {
         "g": np.array([10.0, 6.0, 3.0]),
         "gamma": np.array([0.3]),
         "strikes": np.array([100.0, 110.0, 120.0]),
     }
 
-    assert evaluate_spline(result, 130.0) == pytest.approx(0.0, abs=1e-12)
+    assert evaluate_spline(result, 130.0) == pytest.approx(5.0, abs=1e-12)
+
+
+def test_diagnostics_right_boundary_uses_positive_curvature_term():
+    result = {
+        "g": np.array([10.0, 6.0, 3.0]),
+        "gamma": np.array([0.3]),
+        "strikes": np.array([100.0, 110.0, 120.0]),
+        "S": 100.0,
+        "r": 0.0,
+        "T": 1.0,
+    }
+
+    diagnostics = check_arbitrage(result)
+
+    assert diagnostics["monotonicity_ok"] is False
+    assert any("right derivative" in msg for msg in diagnostics["violations"])
