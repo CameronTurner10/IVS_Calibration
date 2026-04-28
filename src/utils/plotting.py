@@ -449,7 +449,60 @@ def plot_spline_surface(spline_dict: dict, sheet_name: str = "") -> None:
     -----
     Mirror existing SVI surface plot structure. 3D surface and heatmap side by side.
     """
-    raise NotImplementedError("Not yet implemented")
+    from src.smoothing_spline.optimisation.fit_spline import fit_all_splines
+    from src.smoothing_spline.implementation.spline_model import prices_to_iv
+    
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    expiries = sorted(df["Year Fraction"].unique())
+    market_surfaces = {}
+    S_dict = {}
+
+    for T in expiries:
+        slice_df = df[np.isclose(df["Year Fraction"], T)]
+        strikes = slice_df["Strike"].values
+        call_prices = slice_df["Call Price"].values
+        S = slice_df["Spot"].iloc[0]
+
+        market_surfaces[T] = (strikes, call_prices)
+        S_dict[T] = S
+
+    fitted = fit_all_splines(market_surfaces, S_dict)
+
+    all_k = []
+    for T in expiries:
+        strikes, _ = market_surfaces[T]
+        forward = fitted[T]["forward"]
+        k_vals = np.log(strikes / forward)
+        all_k.extend(k_vals.tolist())
+
+
+    k_grid = np.linspace(min(all_k), max(all_k), 1000)
+    T_knots = np.array(expiries)
+    W = np.zeros((len(T_knots), len(k_grid)))
+
+    for i, T in enumerate(T_knots):
+        result = fitted[T]
+        forward = result["forward"]
+        K_grid = forward * np.exp(k_grid)
+        iv_grid = prices_to_iv(result, K_grid, forward)
+
+        if plot_type == "iv":
+            W[i, :] = iv_grid
+        else:
+            W[i, :] = iv_grid**2 * T
+
+    K_mesh, T_mesh = np.meshgrid(k_grid, T_knots)
+
+    fig= plt.figure(figsize=(11, 6))
+    ax = fig.add_subplot(111,projection="3d")
+    surface = ax.plot_surface(K_mesh,T_mesh,W)
+
+    ax.set_xlabel("Log-moneyness k = log(K / F)")
+    ax.set_ylabel("Maturity T (years)")
+    ax.set_zlabel("Total implied variance w(k,T)")
+    ax.set_title(f"Spline Surface — {sheet_name}", fontsize=13, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
