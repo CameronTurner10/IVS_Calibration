@@ -7,7 +7,7 @@ check_smoothness: Function to check the smoothness of the spline"""
 
 
 from statistics import median
-
+from src.smoothing_spline.implementation.spline_model import (second_derivative)
 import numpy as np
 
 
@@ -157,22 +157,22 @@ def check_arbitrage(result: dict) -> dict:
     }
 
 
-def check_smoothness(spline):
+def check_smoothness(spline: dict) -> dict:
     """
     Check the smoothness of the fitted spline.
     Placeholder function, actual implementation will analyze the spline's derivatives.
     """
-    abs_vals = np.abs(second_derivative)
+    abs_vals = np.abs(second_derivative(spline))
 
-    median = np.median(abs_vals)
+    median_val = np.median(abs_vals)
 
-    if median == 0:
-        return True  # flat spline
+    if median_val == 0:
+        return {"smooth": True, "spike_ratio": 0.0}  # flat spline
 
-    spike_ratio = np.max(abs_vals) / median
+    spike_ratio = np.max(abs_vals) / median_val
 
     if spike_ratio > 10:  # heuristic
-        return False
+        return {"smooth": False, "spike_ratio": spike_ratio}
 
     raise NotImplementedError("Smoothness check not implemented yet")
 
