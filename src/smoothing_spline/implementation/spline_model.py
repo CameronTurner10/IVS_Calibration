@@ -172,6 +172,7 @@ def fit_smoothing_spline(
     
 
     check = Q.T @ g - R @ gamma
+    forward = float(S * disc_delta / disc_r)
     return {
         "g": g,
         "gamma": gamma,
@@ -182,6 +183,7 @@ def fit_smoothing_spline(
         "r": r,
         "T": T,
         "delta": delta,
+        "forward": forward, 
         "fit_mode": fit_mode,
         "min_price": float(min_price),
         "weights": np.diag(observation_matrix).copy(),

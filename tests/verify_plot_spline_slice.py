@@ -155,7 +155,6 @@ def main() -> int:
         T=T,
         market_strikes=strikes,
         market_vols=market_vols,
-        forward=F,
         sheet_name=SHEET_NAME,
         plot_type=PLOT_TYPE,
     )
