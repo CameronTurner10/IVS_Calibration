@@ -3,7 +3,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from src.smoothing_spline.implementation.spline_model import (
+from smoothing_spline.implementation.spline_model import (
     build_observation_matrix,
     build_Q_matrix,
     build_R_matrix,
