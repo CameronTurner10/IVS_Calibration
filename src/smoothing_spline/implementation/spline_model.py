@@ -64,8 +64,9 @@ def build_observation_matrix(
     min_price: float = 1e-4,
 ) -> np.ndarray:
     """
-    Builds $W$ (observation weights). 
-    2005 = Identity. 2009 = Diagonal inverse prices (weighted).
+    Builds W (observation weights).
+    2005 = Identity. Weighted mode uses inverse squared floored prices,
+    corresponding to relative squared price errors.
     """
     if fit_mode not in ALLOWED_FIT_MODES:
         raise ValueError(
@@ -76,8 +77,8 @@ def build_observation_matrix(
     if fit_mode == "unweighted":
         return np.identity(n)
 
-    price_floor = np.maximum(call_prices, min_price)
-    return np.diag(1.0 / price_floor)
+    floored_call_prices = np.maximum(call_prices, min_price)
+    return np.diag(1.0 / floored_call_prices**2)
 
 
 def fit_smoothing_spline(
@@ -131,7 +132,8 @@ def fit_smoothing_spline(
         right_slope = (g_current[-1] - g_current[-2]) / h[-1]
         if len(gamma_current) > 0:
             left_slope -= (h[0] / 6.0) * gamma_current[0]
-            right_slope -= (h[-1] / 6.0) * gamma_current[-1]
+            right_slope += (h[-1] / 6.0) * gamma_current[-1]
+            # Brandon 27/04 : Fixed sign error for right slope
 
         return np.array([
             left_slope + disc_r,
@@ -254,8 +256,8 @@ def evaluate_spline(result: dict, u: float) -> float:
         raise ValueError("gamma must have length n or n-2")
 
     g_prime_left  = (g[1] - g[0]) / h[0] - (h[0] / 6) * gamma_full[1] # Slope of the leftmost knot
-    g_prime_right = (g[-1] - g[-2]) / h[-1] - (h[-1] / 6) * gamma_full[-2] # Slope of the rightmost knot
-    #Brandon 20/04/2026: changed sign in g_prime_right to match fengler
+    g_prime_right = (g[-1] - g[-2]) / h[-1] + (h[-1] / 6) * gamma_full[-2] # Slope of the rightmost knot
+    #brandon 27/04 : Fixed sign error for right slope
 
     # Left extrapolation: Fengler eq 23
     if u <= strikes[0]:
