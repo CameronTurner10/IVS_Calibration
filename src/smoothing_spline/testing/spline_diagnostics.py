@@ -4,6 +4,10 @@ Contains:
 check_arbitrage: Function to check for arbitrage in the fitted spline
 check_smoothness: Function to check the smoothness of the spline"""
 
+
+
+from statistics import median
+from src.smoothing_spline.implementation.spline_model import (second_derivative)
 import numpy as np
 
 
@@ -102,7 +106,8 @@ def check_arbitrage(result: dict) -> dict:
     h = np.diff(strikes)
 
     left_slope = (g[1] - g[0]) / h[0] - (h[0] / 6.0) * gamma_full[1]
-    right_slope = (g[-1] - g[-2]) / h[-1] - (h[-1] / 6.0) * gamma_full[-2]
+    right_slope = (g[-1] - g[-2]) / h[-1] + (h[-1] / 6.0) * gamma_full[-2]
+    # Brandon 27/04 : fixed sign error for right slope
 
     if left_slope < -disc_r - tol:
         monotonicity_ok = False
@@ -152,11 +157,22 @@ def check_arbitrage(result: dict) -> dict:
     }
 
 
-def check_smoothness(spline):
+def check_smoothness(spline: dict) -> dict:
     """
     Check the smoothness of the fitted spline.
     Placeholder function, actual implementation will analyze the spline's derivatives.
     """
-    raise NotImplementedError("Smoothness check not implemented yet")
+    abs_vals = np.abs(second_derivative(spline))
 
+    median_val = np.median(abs_vals)
+
+    if median_val == 0:
+        return {"smooth": True, "spike_ratio": 0.0}  # flat spline
+
+    spike_ratio = np.max(abs_vals) / median_val
+
+    if spike_ratio > 10:  # heuristic
+        return {"smooth": False, "spike_ratio": spike_ratio}
+
+    raise NotImplementedError("Smoothness check not implemented yet")
 
