@@ -8,6 +8,7 @@ from smoothing_spline.implementation.spline_model import (
     build_Q_matrix,
     build_R_matrix,
     load_spline_slice,
+    fit_smoothing_spline,
 )
 
 
@@ -116,7 +117,8 @@ def choose_lambda(
 def fit_all_splines(
     market_surfaces: dict,
     S_dict: dict,
-    r: float = 0.05,
+    r_dict: dict,
+    F_dict: dict,
     delta: float = 0.0,
     fit_mode: str = "weighted",
     min_price: float = 1e-4,
@@ -130,8 +132,10 @@ def fit_all_splines(
         Dict {T: (strikes, call_prices)}
     S_dict : dict
         Dict {T: spot_price}
-    r : float, optional
-        Continuously compounded risk-free rate, by default 0.05
+    r_dict : dict
+        Dict {T: risk-free rate}
+    F_dict : dict
+        Dict {T: forward price}
     delta : float, optional
         Continuous dividend yield, by default 0.0
     fit_mode : str, optional
@@ -169,6 +173,12 @@ def fit_all_splines(
         strikes = np.asarray(strikes, dtype=float)
         call_prices = np.asarray(call_prices, dtype=float)
         S = float(S_dict[T])
+        if T not in r_dict:
+            raise KeyError(f"Missing risk-free rate in r_dict for maturity T={T}")
+        if T not in F_dict:
+            raise KeyError(f"Missing forward price in F_dict for maturity T={T}")
+        r = float(r_dict[T])
+        forward = float(F_dict[T])
 
         if strikes.ndim != 1 or call_prices.ndim != 1:
             raise ValueError(f"T={T}: strikes and call_prices must be 1D arrays")
@@ -213,6 +223,7 @@ def fit_all_splines(
         )
 
         result["lambda"] = float(lam)
+        result["forward"] = float(forward)
         results[T] = result
 
         if result.get("success", False):

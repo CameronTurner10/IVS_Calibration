@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from smoothing_spline.optimisation.fit_spline import fit_all_splines
 from src.svi.optimisation.local_optimizers import fit_svi_slice, total_variance
 from src.svi.optimisation.arbitrage import calibrate_surface, fit_single_slice_with_bound
 from mpl_toolkits.mplot3d import Axes3D
@@ -430,24 +431,12 @@ def plot_spline_slice(result: dict, T: float, market_strikes: np.ndarray, market
   
 
 
-def plot_spline_surface(spline_dict: dict, sheet_name: str = "") -> None:
+def plot_spline_surface(sheet_name: str, filepath: str = "tests/data/Surfaces.xlsx", plot_type: str = "total_var") -> None:
     """
-    Plot the full 3D smoothing spline implied volatility surface and a 2D heatmap.
-
-    Parameters
-    ----------
-    spline_dict : dict
-        Dict {T: result_dict} output of fit_all_splines
-    sheet_name : str, optional
-        Sheet name for the plot title, by default ""
-
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    Mirror existing SVI surface plot structure. 3D surface and heatmap side by side.
+    Plot the full 3D smoothing spline surface (IV or total variance).
+    Mirrors plot_surface (SVI version): takes (sheet_name, filepath, plot_type),
+    reads market data from the sheet, fits all slices internally, and renders
+    a 3D surface across (k, T).
     """
     from src.smoothing_spline.optimisation.fit_spline import fit_all_splines
     from src.smoothing_spline.implementation.spline_model import prices_to_iv
@@ -456,17 +445,20 @@ def plot_spline_surface(spline_dict: dict, sheet_name: str = "") -> None:
     expiries = sorted(df["Year Fraction"].unique())
     market_surfaces = {}
     S_dict = {}
+    r_dict = {}
+    F_dict = {}
 
     for T in expiries:
         slice_df = df[np.isclose(df["Year Fraction"], T)]
         strikes = slice_df["Strike"].values
         call_prices = slice_df["Call Price"].values
-        S = slice_df["Spot"].iloc[0]
 
         market_surfaces[T] = (strikes, call_prices)
-        S_dict[T] = S
+        S_dict[T] = float(slice_df["Spot"].iloc[0])
+        r_dict[T] = float(slice_df["Discount Rate"].iloc[0])
+        F_dict[T] = float(slice_df["Forward"].iloc[0])
 
-    fitted = fit_all_splines(market_surfaces, S_dict)
+    fitted = fit_all_splines(market_surfaces, S_dict, r_dict, F_dict)
 
     all_k = []
     for T in expiries:
@@ -489,17 +481,18 @@ def plot_spline_surface(spline_dict: dict, sheet_name: str = "") -> None:
         if plot_type == "iv":
             W[i, :] = iv_grid
         else:
-            W[i, :] = iv_grid**2 * T
+            W[i, :] = iv_grid ** 2 * T
 
     K_mesh, T_mesh = np.meshgrid(k_grid, T_knots)
 
-    fig= plt.figure(figsize=(11, 6))
-    ax = fig.add_subplot(111,projection="3d")
-    surface = ax.plot_surface(K_mesh,T_mesh,W)
+    z_label = "Implied volatility σ(k, T)" if plot_type == "iv" else "Total implied variance w(k, T)"
 
+    fig = plt.figure(figsize=(11, 6))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(K_mesh, T_mesh, W)
     ax.set_xlabel("Log-moneyness k = log(K / F)")
     ax.set_ylabel("Maturity T (years)")
-    ax.set_zlabel("Total implied variance w(k,T)")
+    ax.set_zlabel(z_label)
     ax.set_title(f"Spline Surface — {sheet_name}", fontsize=13, fontweight="bold")
     plt.tight_layout()
     plt.show()
