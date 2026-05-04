@@ -5,6 +5,8 @@ import matplotlib.cm as cm
 from src.svi.optimisation.local_optimizers import fit_svi_slice, total_variance
 from src.svi.optimisation.arbitrage import calibrate_surface, fit_single_slice_with_bound
 from mpl_toolkits.mplot3d import Axes3D
+from src.smoothing_spline.implementation.spline_model import prices_to_iv, fit_smoothing_spline
+from src.smoothing_spline.optimisation.fit_spline import choose_lambda,fit_all_splines
 
 """
 This section is responsible for plotting the SVI calibration results.
@@ -26,6 +28,19 @@ def get_slice_from_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
     w_market = market_vols ** 2 * T
 
     return strikes, market_vols, forward, k_values, w_market
+
+def get_spline_data(T, sheet_name, filepath="tests/data/Surfaces.xlsx"):
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    slice_df = df[np.isclose(df["Year Fraction"], T, atol=1e-8)]
+
+    strikes = slice_df["Strike"].values
+    call_prices=slice_df["Call Price"].values
+    market_vols = slice_df["Volatility"].values
+    spot=slice_df["Spot"].iloc[0]
+    forward = slice_df["Forward"].iloc[0]
+    r=slice_df["Discount Rate"].iloc[0]
+
+    return strikes, call_prices,market_vols,spot,forward,r
 
 
 def plot_single_slice(T, sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="total_var"):
@@ -280,6 +295,7 @@ def plot_variance_heatmap(sheet_name, filepath="tests/data/Surfaces.xlsx"):
     ax.set_ylabel("Maturity T (years)")
     ax.set_title(f"SVI Variance Surface — {sheet_name}", fontsize=13, fontweight="bold")
     plt.tight_layout()
+    plt.show()
 
 def _compute_log10_rmse_errors(sheet_name, filepath, sequential_init):
     """Helper: calibrate the surface and return (expiry list, log10 RMSE list)."""
@@ -348,55 +364,30 @@ def list_available_data(filepath="tests/data/Surfaces.xlsx"):
     return data
 
 
-def plot_spline_slice(result: dict, T: float, market_strikes: np.ndarray, market_vols: np.ndarray, sheet_name: str = "", plot_type: str = "iv") -> None:
-    """
-    Plot a single slice of a fitted smoothing spline against market data.
+def plot_spline_slice(T,sheet_name, plot_type):
+    
+    strikes, call_prices,market_vols,spot,forward,r= get_spline_data(T, sheet_name)
+    lam = choose_lambda(strikes, call_prices, spot, r, T)
 
-    Parameters
-    ----------
-    result : dict
-        Dict returned by fit_smoothing_spline
-    T : float
-        Maturity in years
-    market_strikes : np.ndarray
-        Array of market strike prices
-    market_vols : np.ndarray
-        Array of market implied volatilities
-    sheet_name : str, optional
-        Sheet name for the plot title, by default ""
-    plot_type : str, optional
-        Either "iv" or "total_var", by default "iv"
+ 
+    result = fit_smoothing_spline(strikes, call_prices, lam, spot, r, T)
 
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    Mirror plot_single_slice() structure exactly. Replace SVI fit with evaluate_spline() + prices_to_iv().
-    """
-    from src.smoothing_spline.implementation.spline_model import prices_to_iv
-
-    forward = result["forward"]
-    k_values = np.log(market_strikes / forward)
-
-    if plot_type == "iv":
-        market_y = market_vols
-    else:  
-        market_y = market_vols ** 2 * T
+    k_values = np.log(strikes / forward)
 
     k_grid = np.linspace(min(k_values), max(k_values), 200)
     K_grid = forward * np.exp(k_grid)    
     iv_grid = prices_to_iv(result, K_grid, forward)
-    iv_at_k = prices_to_iv(result, market_strikes, forward)
+    iv_at_k = prices_to_iv(result, strikes, forward)
 
     if plot_type == "iv":
         fitted_y_grid = iv_grid
         fitted_y_at_k = iv_at_k
+        market_y = market_vols
         y_label = "Implied Volatility"
     else:
         fitted_y_grid = iv_grid ** 2 * T
         fitted_y_at_k = iv_at_k ** 2 * T
+        market_y = market_vols ** 2 * T
         y_label = "Total Implied Variance"
     
     residuals = fitted_y_at_k - market_y
@@ -426,83 +417,149 @@ def plot_spline_slice(result: dict, T: float, market_strikes: np.ndarray, market
     
     plt.tight_layout()
     plt.show()
-    
-  
 
-
-def plot_spline_surface(spline_dict: dict, sheet_name: str = "") -> None:
-    """
-    Plot the full 3D smoothing spline implied volatility surface and a 2D heatmap.
-
-    Parameters
-    ----------
-    spline_dict : dict
-        Dict {T: result_dict} output of fit_all_splines
-    sheet_name : str, optional
-        Sheet name for the plot title, by default ""
-
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    Mirror existing SVI surface plot structure. 3D surface and heatmap side by side.
-    """
-    from src.smoothing_spline.optimisation.fit_spline import fit_all_splines
-    from src.smoothing_spline.implementation.spline_model import prices_to_iv
-    
+def plot_multi_spline_slice(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="iv"):
     df = pd.read_excel(filepath, sheet_name=sheet_name)
     expiries = sorted(df["Year Fraction"].unique())
-    market_surfaces = {}
-    S_dict = {}
 
-    for T in expiries:
-        slice_df = df[np.isclose(df["Year Fraction"], T)]
-        strikes = slice_df["Strike"].values
-        call_prices = slice_df["Call Price"].values
-        S = slice_df["Spot"].iloc[0]
+    colours = cm.viridis(np.linspace(0.1, 0.9, len(expiries)))
 
-        market_surfaces[T] = (strikes, call_prices)
-        S_dict[T] = S
+    fig, ax_main = plt.subplots(figsize=(12, 8))
 
-    fitted = fit_all_splines(market_surfaces, S_dict)
+    for i, T in enumerate(expiries):
+        strikes, call_prices, market_vols, S, forward, r = get_spline_data(T, sheet_name, filepath)
+
+        lam = choose_lambda(strikes, call_prices, S, r, T)
+        
+        result = fit_smoothing_spline(strikes, call_prices, lam, S, r, T)
+
+        k_values = np.log(strikes / forward)
+
+        k_grid = np.linspace(k_values.min(), k_values.max(), 200)
+        K_grid = forward * np.exp(k_grid)
+
+        iv_grid = prices_to_iv(result, K_grid, forward)
+        iv_at_k = prices_to_iv(result, strikes, forward)
+
+        if plot_type == "iv":
+            market_y = market_vols
+            fitted_grid = iv_grid
+            y_label = "Implied Volatility"
+        else:
+            market_y = market_vols ** 2 * T
+            fitted_grid = iv_grid ** 2 * T
+            y_label = "Total Variance"
+
+        ax_main.plot(k_grid,fitted_grid,color=colours[i],alpha=0.8,label=f"T={T:.3f}")
+
+        ax_main.scatter(k_values,market_y,color=colours[i],s=20)
+
+    ax_main.set_ylabel(y_label)
+    ax_main.set_xlabel("Log-moneyness (k)")
+    ax_main.set_yscale('log')
+    ax_main.set_title(f"Smoothing spline multi-maturity fit ({sheet_name})")
+    ax_main.grid(True, alpha=0.3)
+    ax_main.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_spline_surface(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="iv"):
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    expiries = sorted(df["Year Fraction"].unique())
+    colours = cm.viridis(np.linspace(0.1, 0.9, len(expiries)))
+    fig = plt.figure(figsize=(12, 8))
+    ax = fig.add_subplot(111, projection="3d")
 
     all_k = []
-    for T in expiries:
-        strikes, _ = market_surfaces[T]
-        forward = fitted[T]["forward"]
-        k_vals = np.log(strikes / forward)
-        all_k.extend(k_vals.tolist())
 
+    slice_data = {}
+    for i, T in enumerate(expiries):
+        strikes, call_prices, market_vols, S, forward, r = get_spline_data(T, sheet_name, filepath)
+        lam = choose_lambda(strikes, call_prices, S, r, T)
+        result = fit_smoothing_spline(strikes, call_prices, lam, S, r, T)
 
-    k_grid = np.linspace(min(all_k), max(all_k), 1000)
-    T_knots = np.array(expiries)
-    W = np.zeros((len(T_knots), len(k_grid)))
+        k_values = np.log(strikes / forward)
+        slice_data[T] = (result, forward)
 
-    for i, T in enumerate(T_knots):
-        result = fitted[T]
-        forward = result["forward"]
+        all_k.extend(k_values.tolist())
+
+    k_grid = np.linspace(min(all_k), max(all_k), 200)
+    T_grid = np.array(expiries)
+
+    K_mesh, T_mesh = np.meshgrid(k_grid, T_grid)
+    W = np.zeros_like(K_mesh)
+
+    for i, T in enumerate(expiries):
+        result, forward = slice_data[T]
+
         K_grid = forward * np.exp(k_grid)
         iv_grid = prices_to_iv(result, K_grid, forward)
 
         if plot_type == "iv":
             W[i, :] = iv_grid
+            z_label = "Implied Volatility"
         else:
             W[i, :] = iv_grid**2 * T
+            z_label = "Total Variance"
 
-    K_mesh, T_mesh = np.meshgrid(k_grid, T_knots)
+    surface = ax.plot_surface(K_mesh, T_mesh, W, cmap=cm.viridis, alpha=0.9)
 
-    fig= plt.figure(figsize=(11, 6))
-    ax = fig.add_subplot(111,projection="3d")
-    surface = ax.plot_surface(K_mesh,T_mesh,W)
+    ax.set_xlabel("Log-moneyness (k)")
+    ax.set_ylabel("Maturity T (years)")
+    ax.set_zlabel(z_label)
+    ax.set_title(f"Smoothing spline surface ({sheet_name})")
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_spline_heatmap(sheet_name, filepath="tests/data/Surfaces.xlsx", plot_type="iv"):
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    expiries = sorted(df["Year Fraction"].unique())
+
+    all_k = []
+
+    slice_data = {}
+    for i, T in enumerate(expiries):
+        strikes, call_prices, market_vols, S, forward, r = get_spline_data(T, sheet_name, filepath)
+        lam = choose_lambda(strikes, call_prices, S, r, T)
+        result = fit_smoothing_spline(strikes, call_prices, lam, S, r, T)
+
+        k_values = np.log(strikes / forward)
+        slice_data[T] = (result, forward)
+
+        all_k.extend(k_values.tolist())
+
+    k_grid = np.linspace(min(all_k), max(all_k), 200)
+    T_grid = np.array(expiries)
+
+    W = np.zeros((len(T_grid), len(k_grid)))
+
+    for i, T in enumerate(expiries):
+        result, forward = slice_data[T]
+
+        K_grid = forward * np.exp(k_grid)
+        iv_grid = prices_to_iv(result, K_grid, forward)
+
+        if plot_type == "iv":
+            W[i, :] = iv_grid
+            label = "Implied Volatility"
+        else:
+            W[i, :] = iv_grid**2 * T
+            label = "Total Variance"
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    cf = ax.contourf(k_grid, T_grid, W, levels=40, cmap="RdYlGn_r")
+    fig.colorbar(cf, ax=ax, label=label)
+
+    cl = ax.contour(k_grid, T_grid, W, levels=12, colors="black", linewidths=0.6, alpha=0.45)
+    ax.clabel(cl, inline=True, fontsize=7, fmt="%.4f", inline_spacing=4)
 
     ax.set_xlabel("Log-moneyness k = log(K / F)")
     ax.set_ylabel("Maturity T (years)")
-    ax.set_zlabel("Total implied variance w(k,T)")
-    ax.set_title(f"Spline Surface — {sheet_name}", fontsize=13, fontweight="bold")
+    ax.set_title(f"Cubic Splines {label} — {sheet_name}", fontsize=13, fontweight="bold")
     plt.tight_layout()
-    plt.show()
+    plt.show()    
 
 
 if __name__ == "__main__":
@@ -520,43 +577,85 @@ if __name__ == "__main__":
     sheet_idx = int(choice) - 1 if choice else 0
     sheet_name = sheets[sheet_idx]
 
-    #choose expiry
-    expiries = data[sheet_name]
-    print(f"\nExpiries in {sheet_name}:")
-    for i, T in enumerate(expiries):
-        days = T * 365
-        print(f"[{i + 1:>2}] T = {T:.6f}  (~{days:.0f} days)")
-    print(f"[ 0] Plot ALL slices")
-
-    choice = input("\nSelect expiry [0 = all, H = heatmap, S = surface, E = error]: ").strip()
-    if choice.upper() == "H":
-        print(f"\nPlotting variance heatmap for {sheet_name}")
-        plot_variance_heatmap(sheet_name, filepath)
-    elif choice.upper() == "S":
-        print(f"\nPlotting variance surface for {sheet_name}")
-        plot_surface(sheet_name, filepath)
-    elif choice.upper() == "E":
-        print("\nError plot mode:")
-        print("[1] Sequential init (warm-start from previous slice)")
-        print("[2] Full DE on every slice (slower, matches Jose's likely approach)")
-        print("[3] Both overlaid for comparison")
-        mode_choice = input("Select mode [1/2/3, default=3]: ").strip()
-        mode_map = {"1": "sequential", "2": "de", "3": "both", "": "both"}
-        mode = mode_map.get(mode_choice, "both")
-        print(f"\nPlotting log10(RMSE) error for {sheet_name} [{mode}]")
-        plot_error_log10_rmse(sheet_name, filepath, mode=mode)
-    else:
-        expiry_idx = int(choice) if choice else 0
-
-        #choose plot type
-        choice2 = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
-        plot_type = "iv" if choice2 == "2" else "total_var"
-
-        #plot
-        if expiry_idx == 0:
-            print(f"\nFitting all {len(expiries)} slices in {sheet_name}")
-            plot_multi_slice(sheet_name, filepath, plot_type=plot_type)
+    #Choose Method
+    choice = input("\nSelect Method [1 = SVI, 2 = Cubic Splines]: ").strip()
+   
+    if choice.upper()=="1":
+         #choose expiry
+        expiries = data[sheet_name]
+        print(f"\nExpiries in {sheet_name}:")
+        for i, T in enumerate(expiries):
+            days = T * 365
+            print(f"[{i + 1:>2}] T = {T:.6f}  (~{days:.0f} days)")
+        print(f"[ 0] Plot ALL slices")
+        choice = input("\nSelect expiry [0 = all, H = heatmap, S = surface, E = error]: ").strip()
+        if choice.upper() == "H":
+            print(f"\nPlotting variance heatmap for {sheet_name}")
+            plot_variance_heatmap(sheet_name, filepath)
+        elif choice.upper() == "S":
+            print(f"\nPlotting variance surface for {sheet_name}")
+            plot_surface(sheet_name, filepath)
+        elif choice.upper() == "E":
+            print("\nError plot mode:")
+            print("[1] Sequential init (warm-start from previous slice)")
+            print("[2] Full DE on every slice (slower, matches Jose's likely approach)")
+            print("[3] Both overlaid for comparison")
+            mode_choice = input("Select mode [1/2/3, default=3]: ").strip()
+            mode_map = {"1": "sequential", "2": "de", "3": "both", "": "both"}
+            mode = mode_map.get(mode_choice, "both")
+            print(f"\nPlotting log10(RMSE) error for {sheet_name} [{mode}]")
+            plot_error_log10_rmse(sheet_name, filepath, mode=mode)
         else:
-            T = expiries[expiry_idx - 1]
-            print(f"\nFitting for T = {T:.6f}")
-            plot_single_slice(T, sheet_name, filepath, plot_type=plot_type)
+            expiry_idx = int(choice) if choice else 0
+
+            #choose plot type
+            choice2 = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
+            plot_type = "iv" if choice2 == "2" else "total_var"
+
+            #plot
+            if expiry_idx == 0:
+                print(f"\nFitting all {len(expiries)} slices in {sheet_name}")
+                plot_multi_slice(sheet_name, filepath, plot_type=plot_type)
+            else:
+                T = expiries[expiry_idx - 1]
+                print(f"\nFitting for T = {T:.6f}")
+                plot_single_slice(T, sheet_name, filepath, plot_type=plot_type)
+
+    if choice.upper()=="2":
+         #choose expiry
+        expiries = data[sheet_name]
+        print(f"\nExpiries in {sheet_name}:")
+        for i, T in enumerate(expiries):
+            days = T * 365
+            print(f"[{i + 1:>2}] T = {T:.6f}  (~{days:.0f} days)")
+        print(f"[ 0] Plot ALL slices")
+        choice = input("\nSelect expiry [0 = all, H = heatmap,  S = surface]: ").strip()
+        if choice.upper() == "S":
+            choice2 = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
+            plot_type = "iv" if choice2 == "2" else "total_var"
+            print(f"\nPlotting surface for {sheet_name}")
+            plot_spline_surface(sheet_name, filepath,plot_type)
+        elif choice.upper() == "H":
+            choice2 = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
+            plot_type = "iv" if choice2 == "2" else "total_var"
+            print(f"\nPlotting heatmap for {sheet_name}")
+            plot_spline_heatmap(sheet_name, filepath, plot_type)
+     
+        else:
+            expiry_idx = int(choice) if choice else 0
+
+            #choose plot type
+            choice2 = input("\nPlot type — [1] Total Variance  [2] Implied Vol: ").strip()
+            plot_type = "iv" if choice2 == "2" else "total_var"
+
+            #plot
+            if expiry_idx == 0:
+                print(f"\nFitting all {len(expiries)} slices in {sheet_name}")
+                plot_multi_spline_slice(sheet_name, filepath, plot_type)
+            else:
+                T = expiries[expiry_idx - 1]
+                print(f"\nFitting for T = {T:.6f}")
+                plot_spline_slice(T, sheet_name, plot_type)
+
+
+    
