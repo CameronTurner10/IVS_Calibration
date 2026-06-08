@@ -34,4 +34,3 @@ def implied_vol(F, K, T, r, market_price, option_type="call"):
 
 # We switchin between calls and puts using call–put parity to avoid numerically unstable
 #deep ITM or deep OTM prices and to ensure a robust implied volatility root-finding.
-

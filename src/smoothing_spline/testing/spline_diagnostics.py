@@ -122,13 +122,17 @@ def check_arbitrage(result: dict) -> dict:
         )
 
     # Eq. 27: price bounds
-    # exp(-delta T)S - exp(-rT)u1 <= g1 <= exp(-delta T)S
     # g_n >= 0
     price_bounds_ok = True
-    disc_delta = np.exp(-delta * T)
+    forward = result.get("forward")
 
-    lower_g1 = disc_delta * S - disc_r * strikes[0]
-    upper_g1 = disc_delta * S
+    if forward is not None:
+        lower_g1 = disc_r * max(forward - strikes[0], 0.0)
+        upper_g1 = disc_r * forward
+    else:
+        disc_delta = np.exp(-delta * T)
+        lower_g1 = disc_delta * S - disc_r * strikes[0]
+        upper_g1 = disc_delta * S
 
     if g[0] < lower_g1 - tol:
         price_bounds_ok = False
