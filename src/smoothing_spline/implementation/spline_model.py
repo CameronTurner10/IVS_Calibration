@@ -8,6 +8,8 @@ from src.utils.root_finder import implied_vol
 
 FILEPATH = "tests/data/Surfaces.xlsx"
 ALLOWED_FIT_MODES = {"unweighted", "weighted"}
+DEFAULT_FIT_MODE = "unweighted"
+#DEFAULT_FIT_MODE = "weighted"
 
 
 def load_spline_slice(sheet_name, T, filepath=FILEPATH):
@@ -60,7 +62,7 @@ def build_R_matrix(strikes: np.ndarray) -> np.ndarray:
 
 def build_observation_matrix(
     call_prices: np.ndarray,
-    fit_mode: str = "weighted",
+    fit_mode: str = None,
     min_price: float = 1e-4,
 ) -> np.ndarray:
     """
@@ -68,6 +70,9 @@ def build_observation_matrix(
     2005 = Identity. Weighted mode uses inverse squared floored prices,
     corresponding to relative squared price errors.
     """
+    if fit_mode is None:
+        fit_mode = DEFAULT_FIT_MODE
+
     if fit_mode not in ALLOWED_FIT_MODES:
         raise ValueError(
             f"Invalid fit_mode '{fit_mode}'. Expected one of {sorted(ALLOWED_FIT_MODES)}"
@@ -89,7 +94,8 @@ def fit_smoothing_spline(
     r: float,
     T: float,
     delta: float = 0.0,
-    fit_mode: str = "weighted",
+    forward: float = None,
+    fit_mode: str = None,
     min_price: float = 1e-4,
 ):
     """
@@ -100,6 +106,9 @@ def fit_smoothing_spline(
     Q = build_Q_matrix(strikes)
     A = np.vstack([Q, -R.T])
     n = len(call_prices)
+    if fit_mode is None:
+        fit_mode = DEFAULT_FIT_MODE
+
     observation_matrix = build_observation_matrix(
         call_prices,
         fit_mode=fit_mode,
@@ -141,9 +150,13 @@ def fit_smoothing_spline(
         ])
 
     bounds = []
-    # Fengler Eq. 27: Price bounds bounds
-    lower_g1 = disc_delta * S - disc_r * strikes[0]
-    upper_g1 = disc_delta * S
+    # Fengler Eq. 27: Price bounds
+    if forward is not None:
+        lower_g1 = disc_r * max(forward - strikes[0], 0.0)
+        upper_g1 = disc_r * forward
+    else:
+        lower_g1 = disc_delta * S - disc_r * strikes[0]
+        upper_g1 = disc_delta * S
     bounds.append((lower_g1, upper_g1)) # bounds on g_1
 
     for _ in range(1, n - 1):
@@ -182,6 +195,7 @@ def fit_smoothing_spline(
         "r": r,
         "T": T,
         "delta": delta,
+        "forward": forward,
         "fit_mode": fit_mode,
         "min_price": float(min_price),
         "weights": np.diag(observation_matrix).copy(),

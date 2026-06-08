@@ -3,10 +3,12 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from smoothing_spline.implementation.spline_model import (
+from src.smoothing_spline.implementation import spline_model
+from src.smoothing_spline.implementation.spline_model import (
     build_observation_matrix,
     build_Q_matrix,
     build_R_matrix,
+    fit_smoothing_spline,
     load_spline_slice,
 )
 
@@ -23,7 +25,7 @@ def choose_lambda(
     #Brandon 20/04/2026: can be gcv or aic, fengler did aic but gcv is another i fount works well
     criterion: str = "aic",
     #criterion: str = "gcv",
-    fit_mode: str = "weighted",
+    fit_mode: str = None,
     min_price: float = 1e-4,
 ) -> float:
     """
@@ -58,6 +60,8 @@ def choose_lambda(
     """
     # Brandon 20/04/2026: can be gcv or aic, fengler did aic but gcv is another i found works well
     assert criterion in {"gcv", "aic"}, "Criterion must be 'gcv' or 'aic'"
+    if fit_mode is None:
+        fit_mode = spline_model.DEFAULT_FIT_MODE
 
     if lam_grid is None:
         lam_grid = np.logspace(-2, 10, 80)
@@ -118,7 +122,8 @@ def fit_all_splines(
     S_dict: dict,
     r: float = 0.05,
     delta: float = 0.0,
-    fit_mode: str = "weighted",
+    forward_dict: dict = None,
+    fit_mode: str = None,
     min_price: float = 1e-4,
 ) -> dict:
     """
@@ -152,6 +157,8 @@ def fit_all_splines(
         raise TypeError("market_surfaces must be a dict {T: (strikes, call_prices)}")
     if not isinstance(S_dict, dict):
         raise TypeError("S_dict must be a dict {T: spot_price}")
+    if fit_mode is None:
+        fit_mode = spline_model.DEFAULT_FIT_MODE
 
     results = {}
 
@@ -200,6 +207,8 @@ def fit_all_splines(
 
         print(f"  chosen lambda = {lam}")
 
+        forward = forward_dict[T] if forward_dict and T in forward_dict else None
+
         result = fit_smoothing_spline(
             strikes=strikes,
             call_prices=call_prices,
@@ -208,6 +217,7 @@ def fit_all_splines(
             r=r,
             T=T,
             delta=delta,
+            forward=forward,
             fit_mode=fit_mode,
             min_price=min_price,
         )
