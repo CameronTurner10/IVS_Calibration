@@ -360,13 +360,7 @@ The smoothing spline method fits call prices across strike while penalising roug
 A simplified version of the spline problem is:
 
 $$
-\begin{aligned}
-\min_{\mathbf{g}} \quad
-&\left(\mathbf{C} - \mathbf{g}\right)^\top
-W
-\left(\mathbf{C} - \mathbf{g}\right)
-+ \lambda \int \left(g''(K)\right)^2\,dK
-\end{aligned}
+\min_{\mathbf{g}} \left(\mathbf{C} - \mathbf{g}\right)^\top W \left(\mathbf{C} - \mathbf{g}\right) + \lambda \int \left(g''(K)\right)^2\,dK
 $$
 
 subject to no-arbitrage constraints on convexity, monotonicity, and price bounds.
